@@ -1,0 +1,877 @@
+"""
+Computer program based on the paper
+arXiv:1009.0437v2 [math-ph] 28 Mar 2011
+
+Author: Valmir Peixôto
+"""
+
+import numpy as np
+import pickle as pk
+from math import sqrt
+from collections import defaultdict
+from pathlib import Path
+import copy
+
+#flag_warning = False
+
+Q_M_START_INDEX = 0     # it must be 1 as it is defined on the article, but for array purposes it's better to be 0
+FLOAT_ZERO_PRECISION = 10**(-10)    # precision to define if a float number is zero
+
+class SU_irrep():
+    __slots__ = "i_weight", "N", "dim", "basis", "casimir2"
+
+    def __init__(self, irrep_array : list):
+        """Initializate a SU(N) irredutible representation."""
+
+        if irrep_array[-1] != 0:
+            raise TypeError("Error! Last item of the array must be zero.")
+
+        self.i_weight = irrep_array
+        self.N = len(self.i_weight)
+
+        self.dim = None
+        self.basis = None
+        self.casimir2 = None
+
+
+    def get_basis(self, crescent_order = True) -> list['SU_state']:
+        """Compute the basis for this representation.
+        
+        It is computed only once. Subsequent calls returns the previous result."""
+        if self.basis is not None:
+            return self.basis
+        
+        self.basis = create_basis_states_list_for_rep(self, crescent_order=crescent_order)
+        return self.basis
+
+
+    def get_dimension(self) -> int:
+        """Calculate the dimension for this SU(N) irreducible representation.
+        
+        It is computed only once. Subsequent calls returns the previous result."""
+        if self.dim is not None:
+            return self.dim
+        
+        prod = 1
+        for j in range(1, self.N + 1):
+            for i in range(1, j):
+                frac = ((self.i_weight[i-1] - self.i_weight[j-1])/(j-i))
+                prod *= (1 + frac)
+            
+        self.dim = round(prod)
+        return self.dim
+    
+
+    def get_quadratic_casimir(self) -> float:
+        """Compute the SU(N) quadratic Casimir for this representation.
+        
+        It is computed only once. Subsequent calls returns the previous result."""
+
+        if self.casimir2 is not None:
+            return self.casimir2
+
+        num_boxes = sum(self.i_weight)
+
+        sum_value = 0
+
+        # U(N) contribution
+        for i in range(0, self.N - 1):
+            sum_value += self.i_weight[i] * (self.i_weight[i] - 2*(i+1) + self.N + 1)
+
+        # SU(N) contribution, which is zero for U(N)
+        sum_value -= (num_boxes**2) / self.N
+
+        self.casimir2 = sum_value
+        return sum_value
+    
+    def get_conjugate_rep(self) -> 'SU_irrep':
+        """Returns the correspondent conjugate representation."""
+        column_array = []
+        rep_copy = copy.deepcopy(self.i_weight)
+
+        # counting boxes on each column
+        while rep_copy[0] > 0:
+            boxes = 0
+            for i in range(self.N):
+                if rep_copy[i] > 0:
+                    boxes += 1
+                    rep_copy[i] -= 1 
+            column_array.append(boxes)
+
+        assert len(column_array) == self.i_weight[0]
+
+        # now apply the conjugate
+        for i in range(self.i_weight[0]):
+            column_array[i] = self.N - column_array[i]
+
+        # reorder the columns in a way it makes sense for a Young Diagram
+        new_column = list(reversed(column_array))
+
+        new_diagram = [ 0 for _ in range(self.N) ]
+
+        for num_boxes in new_column:
+            for i in range(num_boxes):
+                new_diagram[i] += 1
+
+        return SU_irrep(new_diagram)
+
+    def generate_highest_state(self, crescent_order = True, compute_zweight = False) -> 'SU_state':
+        """Generate the highest state (i.e. it's annihilated by any J+ operator)
+        for the representation given."""
+
+        return self.get_basis()[-1] if crescent_order else self.get_basis()[0]
+    
+    def is_trivial_rep(self):
+        return self.i_weight[0] == 0
+    
+    # SU(2) functions
+
+    def generate_SU2_irrep(j : float) -> 'SU_irrep':
+        """Initializate a SU(2) representation for 'j'."""
+
+        state_array = [round(2*j), 0]
+        
+        return SU_irrep(state_array)
+    
+    def get_SU2_j(self) -> float:
+        """Get SU(2) corresponding 'j' for this representation."""
+        if self.N != 2:
+            raise TypeError("Error! This is not a SU(2) representation.")
+        return self.i_weight[0] / 2
+    
+    def get_SU2_j_idx(self) -> int:
+        """Get SU(2) corresponding 'j' index for this representation."""
+        if self.N != 2:
+            raise TypeError("Error! This is not a SU(2) representation.")
+        return self.i_weight[0]
+    
+    # other methods
+    
+    def __str__(self):
+        return str(self.i_weight)
+    
+    def __eq__(self, other_irrep : 'SU_irrep'):
+        return self.i_weight == other_irrep.i_weight
+    
+    def __lt__(self, other_irrep : 'SU_irrep'):
+        if self.N != other_irrep.N:
+            raise Exception(f"Trying to compare two representations from different groups:\nSU({self.N}) and SU({other_irrep.N}) respectively.")
+
+        for i in range(self.N):
+            if self.i_weight[i] < other_irrep.i_weight[i]:
+                return True
+            elif self.i_weight[i] > other_irrep.i_weight[i]:
+                return False
+        return False
+    
+    def __gt__(self, other_irrep : 'SU_irrep'):
+        if self.N != other_irrep.N:
+            raise Exception(f"Trying to compare two representations from different groups:\nSU({self.N}) and SU({other_irrep.N}) respectively.")
+
+        for i in range(self.N):
+            if self.i_weight[i] > other_irrep.i_weight[i]:
+                return True
+            elif self.i_weight[i] < other_irrep.i_weight[i]:
+                return False
+        return False
+
+
+
+class SU_state():
+    __slots__ = "irrep", "gt_pattern", "N", "qm", "sigma", "z_weight", "p_weight"
+
+    def __init__(self, gt_pattern : list, qm : int = None):
+        """Initializate SU(N) state."""
+        self.irrep = SU_state.assert_row_order_return_irrep(gt_pattern)
+        self.gt_pattern = gt_pattern
+        self.N = self.irrep.N
+        self.qm = qm
+        self.sigma = None
+        self.z_weight = None
+        self.p_weight = None
+
+
+    def assert_row_order_return_irrep(gt_pattern : list) -> SU_irrep:
+        """Ensure that the rows are GT pattern ordered, and return the irrep the state belongs to."""
+        length_list = [ len(row) for row in gt_pattern ]
+        if sorted(length_list) != length_list:
+            raise TypeError(f"Error! GT pattern is not ordered: {gt_pattern}")
+        return SU_irrep(gt_pattern[-1])   # gt_pattern[-1] is the i-weight (or equivalently irrep label)
+
+    
+    def get_sigma(self) -> list[int]:
+        """Get row sum "sigma" array. 
+        
+        It is computed only once. Subsequent calls returns the previous result."""
+
+        if self.sigma is not None:
+            return self.sigma
+        
+        sigma = []
+        num_entries = self.N
+
+        for l in range(num_entries):
+            sigma.append(sum(self.gt_pattern[l]))
+
+        self.sigma = sigma
+        return sigma
+        
+
+    def get_z_weight(self) -> list[float]:
+        """Compute the z-weight of the state.
+        
+        It is computed only once. Subsequent calls returns the previous result."""
+
+        if self.z_weight is not None:
+            return self.z_weight
+        
+        z_weight = []
+
+        sigma = self.get_sigma()
+
+        z_weight.append( sigma[0] - 0.5*(sigma[1]) )
+        for l in range(1, self.N - 1):
+            z_weight.append( sigma[l] - 0.5*(sigma[l+1] + sigma[l-1]) )
+
+        self.z_weight = z_weight
+        return z_weight
+    
+
+    def get_p_weight(self) -> list[float]:
+        """Compute the p-weight of the state.
+        
+        It is computed only once. Subsequent calls returns the previous result."""
+
+        if self.p_weight is not None:
+            return self.p_weight
+        
+        sigma = self.get_sigma()
+
+        self.p_weight = [ sigma[l] - sigma[l-1] if l > 0 else sigma[l] for l in range(self.N) ]
+        return self.p_weight
+
+
+    def get_diagonal_gt_pattern(self):
+        """Diagonal type m_{k,l} indices."""
+        diagonal_list = []
+        pattern_reversed = list(reversed(self.gt_pattern))
+        for k in range(self.N):
+            diagonal = []    
+            for l in range(self.N - k):
+                diagonal.append(pattern_reversed[l][k])
+
+            # add Nones for l matches the array index
+            # reverse order because highest l is on the top
+            diagonal_list.append([None for _ in range(k)] + diagonal[::-1])    
+
+        #print(f"GT-Pattern = {self}, Diagonal pattern = {diagonal_list}")
+        return diagonal_list
+
+
+    def get_qm(self):
+        """Get Q(M) for this state."""
+
+        if self.qm is not None:
+            return self.qm
+        
+        basis = self.irrep.get_basis()
+        return basis.index(self)
+
+
+    def compute_j_plus_component(self, arr_k, arr_l) -> float:
+        
+        k = arr_k + 1       # k = true k
+        l = arr_l + 1       # l = true l
+        pattern = self.gt_pattern
+
+        prod_1 = 1
+        for kp in range(1, l+2):
+            prod_1 *= pattern[arr_l+1][kp-1] - pattern[arr_l][arr_k] + k - kp
+
+        prod_2 = 1
+        for kp in range(1, l):
+            prod_2 *= pattern[arr_l-1][kp-1] - pattern[arr_l][arr_k] + k - kp - 1
+
+        prod_3 = 1
+        for kp in range(1, l+1):
+            if kp != k:
+                num = pattern[arr_l][kp-1] - pattern[arr_l][arr_k] + k - kp
+                prod_3 *= num*(num-1)
+
+        assert prod_3 != 0
+
+        return sqrt(-prod_1*prod_2/prod_3)
+
+
+    def compute_j_minus_component(self, arr_k, arr_l) -> float:
+        
+        k = arr_k + 1
+        l = arr_l + 1
+        pattern = self.gt_pattern
+
+        prod_1 = 1
+        for kp in range(1, l+2):
+            prod_1 *= pattern[arr_l+1][kp-1] - pattern[arr_l][arr_k] + k - kp + 1
+
+        prod_2 = 1
+        for kp in range(1, l):
+            prod_2 *= pattern[arr_l-1][kp-1] - pattern[arr_l][arr_k] + k - kp
+
+        prod_3 = 1
+        for kp in range(1, l+1):
+            if kp != k:
+                num = pattern[arr_l][kp-1] - pattern[arr_l][arr_k] + k - kp
+                prod_3 *= (num+1)*num
+
+        assert prod_3 != 0
+
+        return sqrt(-prod_1*prod_2/prod_3)
+
+
+    def increased_is_valid(self, k, l) -> bool:
+        """Verify if the J+ may create a valid GT-pattern for 'k' and 'l'."""
+        
+        diagonal_pattern = self.get_diagonal_gt_pattern()
+
+        # verify k == 0 to avoid negative index
+        return ((k == 0 or diagonal_pattern[k-1][l-1] >= diagonal_pattern[k][l] + 1 ) 
+                    and ( diagonal_pattern[k][l+1] >= diagonal_pattern[k][l] + 1))
+
+
+
+    def get_gt_pattern_increment(self, k, l) -> 'SU_state':
+        """Get the GT-pattern for J+ acting on this state for 'k' and 'l'."""
+        new_state = copy.deepcopy(self.gt_pattern)
+        new_state[l][k] += 1
+        return SU_state(new_state)
+    
+
+    def decreased_is_valid(self, k, l) -> bool:
+        """Verify if the J- may create a valid GT-pattern for 'k' and 'l'."""
+
+        diagonal_pattern = self.get_diagonal_gt_pattern()
+        
+        if diagonal_pattern[k][l] - 1 >= 0:
+            # verify k == l for avoiding getting a non-existing entry on GT-pattern
+            return ((k == l or diagonal_pattern[k][l] - 1 >= diagonal_pattern[k][l-1])
+                    and diagonal_pattern[k][l] - 1 >= diagonal_pattern[k+1][l+1] )
+        return False
+    
+
+    def get_gt_pattern_decrement(self, k, l) -> 'SU_state':
+        """Get the GT-pattern for J- acting on this state for 'k' and 'l'."""
+        new_state = copy.deepcopy(self.gt_pattern)
+        new_state[l][k] -= 1
+        return SU_state(new_state)
+
+
+    def get_SU2_m(self):
+        """Get SU(2) corresponding 'm' for this state."""
+        assert self.N == 2
+        j = self.irrep.get_SU2_j()
+        return j - self.gt_pattern[0][0]
+        
+
+    def __str__(self):
+        """Convert state rows to string."""
+        rows = []
+        for np_row in self.gt_pattern[::-1]:
+            rows.append(np_row)
+        return str(rows)
+    
+
+    def __eq__(self, other_state):
+        assert self.N == other_state.N
+        for i in range(self.N):
+            if self.gt_pattern[i] != other_state.gt_pattern[i]:
+                return False
+        return True
+
+    # TODO: to be tested
+    # TODO: is it useful?
+    def __lt__(self, other_state):
+        """Returns if this state is lying before 'other_state'."""
+        N = self.irrep.N
+
+        assert N == other_state.irrep.N
+
+        self_weight = self.get_z_weight()
+        othr_weight = other_state.get_z_weight()
+
+        for i in range(N):
+            if self_weight[i] - self_weight[N-i] != othr_weight[i] - othr_weight[N-i]:
+                return self_weight[i] - self_weight[N-i] < othr_weight[i] - othr_weight[N-i]
+        return False
+    
+
+class SU_decomposition():
+    __slots__ = "decomposition"
+
+    def __init__(self, 
+                 rep_1 : SU_irrep, 
+                 rep_2 : SU_irrep,
+                 decrescent_order = True):
+
+        """Decompose two SU(N) representations.
+
+        Arguments:
+
+        'rep_1' : i-weight of irrep 1.
+        'rep_2' : i-weight of irrep 2.
+        'decrescent_order' : If true, the irreps with highest weights appear first. (default: True)
+
+        The result is stored on the attribute 'decomposition' in a form of a list of 
+        tuples (representation, multiplicity).
+        """
+
+        if rep_1.N != rep_2.N:
+            raise Exception(f"Representations of different groups were given: first one is \na SU({rep_1.N}) representation whereas the second one is a SU({rep_2.N}) representation.")
+
+        initial_array = copy.deepcopy(rep_2.i_weight)
+        basis = rep_1.get_basis()
+
+        unique_decomposed_reps_list = []
+        multiplicity_list = []
+
+        for state in basis:
+
+            t_array = initial_array.copy()
+            decomp_rep = extract_decomposition(state, t_array)     # extract one representation for each state
+
+            # if the state wasn't discarded
+            if decomp_rep is not None:
+                
+                # now verify if it's already on the list
+                bFound = False
+                for i, previous_rep in enumerate(unique_decomposed_reps_list):
+                    
+                    # if it's on the list
+                    if decomp_rep == previous_rep:
+
+                        multiplicity_list[i] += 1
+                        bFound = True
+                        break
+                
+                if not bFound:
+                    unique_decomposed_reps_list.append(decomp_rep)
+                    multiplicity_list.append(1)
+
+        # the result is on crescent order, so reverse it if needed
+        if decrescent_order:
+            unique_decomposed_reps_list = unique_decomposed_reps_list[::-1]
+            multiplicity_list = multiplicity_list[::-1]
+
+        # init all reps
+        unique_decomposed_reps_list = list(map(SU_irrep, unique_decomposed_reps_list))
+
+        # now create tuples list
+        self.decomposition = list(zip(unique_decomposed_reps_list, multiplicity_list))
+
+
+    def get_multiplicity(self, rep_final : SU_irrep):
+        for decomposed_rep, multiplicity in self.decomposition:
+            if rep_final == decomposed_rep:
+                return multiplicity
+        return 0
+
+    def __str__(self):
+        return "\n".join([ f"{rep.i_weight}, multiplicity = {mult}" for rep, mult in self.decomposition ])
+
+
+def get_fusion_number(rep_1 : SU_irrep,
+                          rep_2 : SU_irrep,
+                          rep_final : SU_irrep) -> int:
+        """Get the multiplicity of 'final_rep' on the decomposition of the tensorial
+        product 'rep_1' x 'rep_2'. """
+        decomposed_reps_list = SU_decomposition(rep_1, rep_2)
+        for decomp_rep, multiplicity in decomposed_reps_list.decomposition:
+            if rep_final == decomp_rep:
+                return multiplicity
+        return 0
+
+class CGC_container(dict):
+    """Just a dict that do not create keys for non-existing keys and returns 0.0 instead."""
+    def __missing__(self, key):
+        return 0.0
+
+
+def sum_decompositions_list(decomp_list : list[tuple[SU_irrep, int]]):
+
+    unique_decomposed_reps_list = []
+    multiplicity_list = []
+
+    for decomp in decomp_list:
+        for rep, mult in decomp:
+
+            try:
+                # suppose it is on the list
+                multiplicity_list[ unique_decomposed_reps_list.index(rep) ] += mult
+            except ValueError:
+                # it is not on the list, so register it
+                unique_decomposed_reps_list.append(rep)
+                multiplicity_list.append(mult)
+                
+    return list(zip(unique_decomposed_reps_list, multiplicity_list))
+
+
+class SU_multiple_decomposition():
+    __slots__ = "decomposition"
+    def __init__(self, rep_list : list[SU_irrep], decrescent_order = True):
+
+        """Decompose a list of SU(N) representations.
+
+        Arguments:
+
+        'rep_list' : list of the representations to be decomposed.
+
+        The irreps with highest weights always appear first if 'decrescent_order' is true or not given.
+
+        The result is stored on the attribute 'decomposition' in a form of a list of 
+        tuples (representation, multiplicity).
+        """
+
+        if not len(rep_list) > 1:
+            raise Exception("Not enough representations on this list.")
+
+        # old = keep unchanged until sum iteration finishes
+        # new = new iteration decomposition list
+        current_rep_list_to_decompose_old = [(rep_list[0], 1)]   # first decomposition: first rep, multiplicity 1
+
+        for i in range(len(rep_list) - 1):  # multiplication iteration
+
+            current_rep_list_to_decompose_new = list(zip([], []))   # clean it
+
+            second_operand = rep_list[i+1]    # the next representation at the right on decomposition
+
+            for current_rep, multiplicity in current_rep_list_to_decompose_old:       # sum iteration
+
+                for _ in range(multiplicity):   # account multiplicity: repeat the process
+                    curr_decomp = SU_decomposition(current_rep, second_operand)
+
+                    current_rep_list_to_decompose_new = sum_decompositions_list([current_rep_list_to_decompose_new, 
+                                                                        curr_decomp.decomposition])
+                
+            current_rep_list_to_decompose_old = current_rep_list_to_decompose_new   # update
+
+        # finished!
+        self.decomposition = sorted(current_rep_list_to_decompose_new, reverse=decrescent_order)
+
+    def __str__(self):
+        return "\n".join([ f"{rep.i_weight}, multiplicity = {mult}" for rep, mult in self.decomposition ])
+
+
+
+##  Static functions
+##
+
+def create_representation_list(N, horizontal_max) -> list[SU_irrep]:
+    """Creates a list of SU(N) representations using Young Diagrams.
+
+    horizontal_max: The maximum number of boxes to the right on Young diagrams."""
+
+    def __reset__(iter: list, j: int):
+        """Flat the first 'j' indexes based on 'iter[j]' value."""
+        min_value = iter[j]
+        while j >= 0:
+            iter[j] = min_value
+            j -= 1
+        return iter
+    
+    representation_list = []
+
+    iter = [ 0 for _ in range(N) ]
+
+    while True:
+
+        representation_list.append(SU_irrep(iter.copy()))
+
+        # if the Young tableau is maximized for the cutoff horizontal_max, stop
+        if sum(iter) == horizontal_max*(N-1):
+            break
+
+        if iter[0] != horizontal_max:
+            iter[0] += 1
+        else:
+
+            for j in range(1, N-1):
+                if iter[j] + 1 <= iter[j-1]:
+                    iter[j] += 1
+                    iter = __reset__(iter, j)
+                    break
+
+    return representation_list
+
+def create_basis_states_list_for_rep(gt_i_weight : SU_irrep | list, crescent_order = True):
+    """Given a SU(N) irreducible representation (i-weight) this function computes
+    all the basis states which compose the carrier space of the irrep. 
+    
+    The first state on the list is the lowest-weight state.
+    
+    'crescent_order' : Returns a basis in a crescent order (default: True)
+
+    'init_zweigths' : Calculate the z-weight for each state and store it. (default: False)
+    """
+
+    rep = gt_i_weight if type(gt_i_weight) == SU_irrep else SU_irrep(gt_i_weight)
+
+    basis = [[rep.i_weight]]   # start from the first row 
+
+    max_num_rows = rep.N
+    num_rows = 1
+
+    while num_rows != max_num_rows:
+
+        updated_basis = []
+        qm = 1
+
+        for state in basis:
+        
+            last_row = state[-1]
+
+            element_choices_list = []
+
+            # create the list of all possible choices for each element in the next row, obeying the betweeness relation
+            # use reversed because the first state of the list will be the highest-weight one
+            for i in range(len(last_row)-1):
+                element_choices_list.append(list(reversed(range(last_row[i+1], last_row[i] + 1))))
+
+            # now create all possible rows from the list 
+            rows_list = []
+            length = len(element_choices_list)
+            index_list = [0 for _ in range(length)]
+            max_index_list = [len(element_choices_list[i]) for i in range(length)]
+
+            finished_rows = False
+
+            while not finished_rows:
+
+                row = [element_choices_list[set_idx][i] for set_idx, i in enumerate(index_list)]
+                rows_list.append(row)
+
+                # iterate next index
+                for i in reversed(range(len(index_list))):
+                    if index_list[i] + 1 < max_index_list[i]:
+                        index_list[i] += 1
+                        break
+                    if i == 0:
+                        finished_rows = True
+                        break
+
+                    index_list[i] = 0   # reset
+
+            # all possible next rows in 'rows_list'
+            for row in rows_list:
+                updated_state = copy.deepcopy(state)
+                updated_state.append(row)
+                updated_basis.append(updated_state)  # add a new state
+            
+        # end 'for', all old 'basis' elements have been iterated
+        basis = updated_basis
+        num_rows += 1
+
+    if crescent_order:
+        basis = basis[::-1]  # reverse the order
+
+    # now init class for each state
+
+    states_basis = []
+    qm = Q_M_START_INDEX
+    for state in basis:
+        states_basis.append( 
+            SU_state(state[::-1], qm)
+        )
+        qm += 1
+
+    return states_basis
+
+def compute_bkl(state : SU_state):
+    """Compute the elements b_{k,l} needed for decomposing representations."""
+
+    gt_label = state.gt_pattern
+
+    size = state.N
+
+    b = np.zeros((size,size), dtype=int)
+    
+    for l in range(state.N):
+        for k in range(l+1):
+            if k < l and l >= 1:
+                b[k][l] = gt_label[l][k] - gt_label[l-1][k]
+            else:
+                b[k][l] = gt_label[l][k]
+    
+    return b
+
+
+def extract_decomposition(state : SU_state, t_array : list):
+    """Compute the representation decomposed from 'gt_pattern' using 't_array'."""
+
+    b = compute_bkl(state)
+    num_diagonals = state.N
+    assert num_diagonals == len(t_array)
+
+    for k in range(num_diagonals):
+        for rev_l in reversed(range(k, num_diagonals)):
+            t_array[rev_l] += b[k][rev_l]
+
+            # check inequality
+            for i in range(num_diagonals - 1):
+                if t_array[i] < t_array[i+1]:
+                    return None
+    
+    # now normalize such that the last element = 0
+    last = t_array[-1]
+
+    if last != 0:
+        t_array = [ item - last for item in t_array ]
+
+    return t_array
+
+
+def is_trivial_rep(rep : SU_irrep):
+    return rep.i_weight[0] == 0
+
+def generate_SU2_state(j, m) -> 'SU_state':
+    """Initializate a SU(2) state for 'j' and 'm'."""
+    assert abs(m) <= j      # sanity check
+
+    state_array = [ [round(2*j), 0], 
+                    [round(j-m)] ]
+    
+    return SU_state(state_array)
+
+def test_old():
+    rep = SU_irrep([2,1,0])
+    decomp = SU_decomposition(rep, rep)
+    print(decomp.get_multiplicity(SU_irrep([4,2,0])))
+    print(decomp.get_multiplicity(SU_irrep([2,1,0])))
+    print(decomp.get_multiplicity(SU_irrep([1,1,0])))
+
+    return
+    #su3_rep_states = create_basis_states_list_for_rep(rep)
+    
+    #for state in su3_rep_states:
+    #    print(state)
+    #print(SU_decomposition(rep,rep))
+
+    if False:
+        rep_list = create_representation_list(N=4, horizontal_max=5, gt_scheme=True)
+
+        for rep in rep_list:
+            hghstate1 = rep.generate_highest_state()
+            hghstate2 = rep.generate_highest_state_old()
+            if not(hghstate1 == hghstate2):
+                print(f"{hghstate1} vs {hghstate2}")
+    #else:
+        my_rep = SU_irrep([2,1,0])
+
+        basis = my_rep.get_basis() #create_basis_states_list_for_rep()
+        for state in basis:
+            print(f"{state}, Q(M) = {state.qm}")
+        
+        #print(my_rep.generate_highest_state())
+        #print(basis[-1])
+
+    #rep_list = create_representation_list(N=4, horizontal_max=5)
+    
+
+    # SU(2) testing
+    j1 = 3/2
+    m1 = 3/2
+
+    j2 = 3/2
+    m2 = 3/2
+
+    J = 3
+    M = 3
+
+
+    j1_index = int(j1*2)
+    j2_index = int(j2*2)
+    J_index = int(J*2)
+
+    m1_index = int(j1 + m1)
+    m2_index = int(j2 + m2)
+    M_index = int(J + M)
+
+    rep = SU_irrep([j1_index,0])
+    rep_final = SU_irrep([J_index,0])
+
+    decomp_obj = SU_decomposition(rep, rep)
+
+    for final_rep, mult in decomp_obj.decomposition:
+        if final_rep == rep_final:
+            rep_final = final_rep
+            break
+    
+
+    my_list = CGC_list(rep, rep, rep_final, 1)
+
+    print(my_list.get_CGC(m1_index, m2_index, 0, M_index))
+
+    #for state in su3_rep_states:
+    #    print(f"State {state}, Wz = {state.get_z_weight()}")
+    
+    #state = su3_rep_states[-2]
+    
+    #print(su3_rep_states[-2])
+    #print(compute_bkl(su3_rep_states[-2]))
+
+
+def test():
+
+    rep = SU_irrep([1,0,0])
+    decomp = SU_decomposition(rep, rep)
+
+    rep_final = SU_irrep([1,1,0])
+
+    bFound = False
+    multiplicity = -1
+
+    #my_state = SU_state([[0], [1,0], [1,0,0]])
+    #print(my_state.get_diagonal_gt_pattern())
+    #return
+
+    #for decomposed, mult in decomp.decomposition:
+    #    print(f"{decomposed}, mult = {mult}")
+    #return
+
+    for decomposed, mult in decomp.decomposition:
+        if rep_final == decomposed:
+            bFound = True
+            multiplicity = mult
+    
+    if not bFound:
+        raise Exception("Rep final not found in decomposition")
+
+    #my_list = CGC_list(rep, rep, rep_final, multiplicity)
+
+    highest_state_final = rep_final.generate_highest_state()
+
+    state_1 = SU_state([[0], [1,0], [1,0,0]])
+    state_2 = SU_state([[1], [1,0], [1,0,0]])
+
+    m1_index = state_1.get_qm()
+    m2_index = state_2.get_qm()
+
+    m_index = highest_state_final.get_qm()
+
+    #print(my_list.get_CGC(m1_index, m2_index, 0, m_index))
+
+
+def test2():
+    su3_fund = SU_irrep([1,0,0])
+
+    n = 3
+    rep_list = []
+
+    for i in range(n):
+        rep_list.append(su3_fund)
+
+    print(SU_multiple_decomposition(rep_list))
+
+
+if __name__ == "__main__":
+    test()
+    #test2()
+
