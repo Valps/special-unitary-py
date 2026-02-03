@@ -495,6 +495,366 @@ class CGC_container(dict):
         return 0.0
 
 
+class CGC_list():
+    __slots__ = "rep_1", "rep_2", "rep_final", "N", "multiplicity", "dim_1", "dim_2", "dim_final", "coefficients"
+
+    def __init__(self, 
+                 rep_1 : SU_irrep, 
+                 rep_2 : SU_irrep, 
+                 rep_final : SU_irrep,
+                 multiplicity : int = None,
+                 np_dtype = np.double):
+        """Create a list of CGCs for the decomposition
+        
+        rep_1 x rep_2 = multiplicity * rep_final.
+        
+        If the multiplicity is not furnished, it will be calculated. Otherwise ensure
+        giving the correct multiplicity. There are sanity checks for that: errors may be raised
+        if the multiplicity is wrong."""
+
+        if not (rep_1.N == rep_2.N and rep_2.N == rep_final.N):        # sanity check
+            raise Exception(f"Representations given are from different groups: SU({rep_1.N}), SU({rep_2.N}) and SU({rep_final.N}) respectively.")
+
+        self.coefficients = CGC_container()
+
+        if multiplicity is None:
+            multiplicity = get_fusion_number(rep_1, rep_2, rep_final)
+
+        self.rep_1 = rep_1
+        self.rep_2 = rep_2
+        self.rep_final = rep_final
+        self.N = rep_1.N
+        self.multiplicity = multiplicity
+
+        self.dim_1 = rep_1.get_dimension()
+        self.dim_2 = rep_2.get_dimension()
+        self.dim_final = rep_final.get_dimension()
+
+        if multiplicity > 0:
+
+            self.compute_CGC_highest_state()
+
+            # compute lower states CGCs
+            return
+
+            for mult_idx in range(multiplicity):
+
+                done = np.zeros((self.dim_final), dtype=np.int8)
+                done[-1] = True     # highest p-weight state is already done
+
+                for qm_final in reversed(range(self.dim_final)):
+                    if not done[qm_final]:
+                        self.compute_CGC_lower_states(qm_final, mult_idx, done)
+
+    def set_cgc(self,
+                qm_1 : int, 
+                qm_2 : int, 
+                mult_index : int, 
+                qm_final : int, 
+                value : float):
+        """Manually set a CGC coefficient."""
+        
+        assert 0 <= qm_1 <= self.rep_1.get_dimension()
+        assert 0 <= qm_2 <= self.rep_2.get_dimension()
+        assert 0 <= mult_index <= self.multiplicity
+        assert 0 <= qm_final <= self.rep_final.get_dimension()
+
+        self.coefficients[qm_1, qm_2, mult_index, qm_final] = value
+
+
+    def compute_CGC_highest_state(self):
+        """Computes the list of Clebsch-Gordan Coefficients for the highest weight state on the 
+        final representation."""
+
+        def compare_p_weights(pw_1 : list[float], pw_2 : list[float]):
+            for i in range(len(pw_1)):
+                if abs(pw_1[i] - pw_2[i]) > FLOAT_ZERO_PRECISION:
+                    return False
+            return True
+
+        if self.multiplicity == 0:
+            return 0
+        
+        dim_1 = self.dim_1
+        dim_2 = self.dim_2
+        
+        # create the tensor basis
+        basis_1 = self.rep_1.get_basis()
+        basis_2 = self.rep_2.get_basis()
+
+        highest_state = self.rep_final.generate_highest_state()
+
+        dim_final = self.rep_final.get_dimension()
+
+        curr_column = 0     # the column size is the number of CGCs to be computed
+        num_states = 0
+
+        # we need to exclude the states which their p-weight sum does not matches the highest state p-weight on final representation
+        coeff_mapping = np.full((dim_1, dim_2), -1)
+        state_mapping = np.full((dim_1, dim_2), -1)
+
+        HPrimePrime_p_weight = highest_state.get_p_weight()
+
+        #print(f"Highest state: {highest_state}")
+        #print(f"Its p-weight: {HPrimePrime_p_weight}")
+
+        for state_left in basis_1:
+
+            M_p_weight = state_left.get_p_weight()
+
+            for state_right in basis_2:
+
+                MPrime_p_weight = state_right.get_p_weight()
+
+                # verify if there is a possibility of non-vanishing CGCs for these states
+                # the sum of p_weight's of the states must matches with the final state p_weight
+
+                sum_p_weight = [ i + j for i, j in zip(M_p_weight, MPrime_p_weight) ]
+
+                #print(f"Verifying for {state_left} and {state_right}")
+
+                if compare_p_weights(sum_p_weight, HPrimePrime_p_weight):
+
+                    #print(f"Match: {M_p_weight} + {MPrime_p_weight} = {HPrimePrime_p_weight}")
+
+                    coeff_mapping[state_left.qm][state_right.qm] = curr_column
+                    curr_column += 1
+
+        num_cgcs = curr_column
+        #print(f"Num of CGCs to be computed: {num_cgcs}")        # TODO: TO BE REMOVED
+
+        # if it has 1 column (or 1 CGC), then the comparison is 1 to 1
+        if num_cgcs == 1:
+            for i in range(dim_1):
+                for j in range(dim_2):
+                    if coeff_mapping[i][j] >= 0:
+                        self.set_cgc(i, j, 0, dim_final - 1, 1.0)       # Q(H'') = dim_final - 1
+                        return
+
+        # initializate matrix to be solved
+        matrix = np.zeros((dim_1 * dim_2, num_cgcs))
+
+        #print(f"Dimension of rep 1: {dim_1}")
+        #print(f"Dimension of rep 2: {dim_2}")
+        #print(f"Matriz size: {matrix.shape}")
+        
+        for state_left in basis_1:
+            i = state_left.qm
+
+            for state_right in basis_2:
+                j = state_right.qm
+
+                if coeff_mapping[i][j] >= 0:
+                    
+                    # iterate over all J+ operators
+                    for l in range(self.N - 1):
+
+                        # iterate over all possible results for J+^l
+                        for k in range(l+1):
+                            
+                            # left J+
+                            if state_left.increased_is_valid(k,l):
+
+                                # get corresponding upper state for k and l
+                                upper_1 = state_left.get_gt_pattern_increment(k,l)
+                                h = basis_1.index(upper_1)  # index on basis 1
+
+                                if state_mapping[h][j] < 0:
+                                    state_mapping[h][j] = num_states
+                                    num_states += 1
+
+                                # matrix[row = state][column = cgc]
+                                matrix[ state_mapping[h][j] ][ coeff_mapping[i][j] ] += state_left.compute_j_plus_component(k,l)
+
+                            # right J+
+                            if state_right.increased_is_valid(k,l):
+
+                                # get corresponding upper state for k and l
+                                upper_2 = state_right.get_gt_pattern_increment(k,l)
+                                h = basis_2.index(upper_2)  # index on basis 2
+
+                                if state_mapping[i][h] < 0:
+                                    state_mapping[i][h] = num_states
+                                    num_states += 1
+
+                                # matrix[row = state][column = cgc]
+                                matrix[ state_mapping[i][h] ][ coeff_mapping[i][j] ] += state_right.compute_j_plus_component(k,l)
+
+        # matrix is ready
+        # solving rectangular matrix by singular value decomposition
+
+        #print(f"matrix to be solved: {matrix}")
+        
+        u_matrix, singular_values_desc_order, vt_matrix = np.linalg.svd(matrix, compute_uv=True)
+        
+        num_zero_singular_values = 0
+
+        # count the zero singular values
+        for entry in singular_values_desc_order:
+            if abs(entry) < FLOAT_ZERO_PRECISION:
+                num_zero_singular_values += 1
+        
+        # the number of zero singular values must match the multiplicity, since it has 'multiplicity' linearly independent solutions
+        if num_zero_singular_values != self.multiplicity:
+            raise Exception(f"The number of zero singular values ({num_zero_singular_values}) do not match the given multiplicity ({self.multiplicity})")
+
+        # now retrieve the CGC's from the singular value decomposition
+        for mult_idx in range(self.multiplicity):
+            for i in range(dim_1):
+                for j in range(dim_2):
+                    if coeff_mapping[i][j] >= 0:
+                        # get the last rows of V^T (or the last columns of V), which are LI orthonormalized solutions
+                        coefficient = vt_matrix[ num_cgcs - self.multiplicity - 1 ][ coeff_mapping[i][j] ]
+
+                        # verify if it's not zero
+                        if abs(coefficient) > FLOAT_ZERO_PRECISION:
+                            # the final state is the highest one, so its index is rep_final_dim - 1
+                            self.set_cgc(i, j, mult_idx, self.rep_final.get_dimension() - 1, coefficient)
+
+
+    def compute_CGC_lower_states(self, qm_final, alpha, done):
+        """Computes the list of Clebsch-Gordan Coefficients for the lower weight states on the 
+        final representation, assuming that the highest weight state CGCs were computed before."""
+
+        state_weight = np.array( self.rep_final.get_basis()[qm_final].get_p_weight() )
+
+        parent_mapping = np.full((self.dim_final), -1)
+        multi_mapping = np.full((self.dim_final), -1)
+        which_l_mapping = np.full((self.dim_final), -1)
+
+        basis_final = self.rep_final.get_basis()
+
+        num_parents = 0
+        num_multi = 0
+
+        for final_rep_state in basis_final:
+
+            p_weight = np.array( final_rep_state.get_p_weight() )
+
+            if np.isclose(p_weight, state_weight).all():    #p_weight == state_weight:
+                multi_mapping[final_rep_state.qm] = num_multi
+                num_multi += 1
+            else:
+                for l in range(self.N - 1):
+                    
+                    p_weight[l] -= 1
+                    p_weight[l+1] += 1
+
+                    if np.isclose(p_weight, state_weight).all(): #p_weight == state_weight:
+                        parent_mapping[final_rep_state.qm] = num_parents
+                        num_parents += 1
+                        which_l_mapping[final_rep_state.qm] = l
+
+                        if not done[final_rep_state.qm]:
+                            self.compute_CGC_lower_states(final_rep_state.qm, alpha, done)
+                        break
+
+                    p_weight[l] += 1
+                    p_weight[l+1] -= 1
+
+        
+        final_rep_coeffs = np.zeros((num_multi, num_parents))   # coefficients 'b'
+        prod_coeffs = np.zeros((self.dim_1 * self.dim_2, num_parents))
+
+        prod_states_mapping = np.full((self.dim_1, self.dim_2), -1)
+
+        num_prod_states = 0
+
+        basis_1 = self.rep_1.get_basis()
+        basis_2 = self.rep_2.get_basis()
+
+        for final_rep_state in basis_final:
+            if parent_mapping[final_rep_state.qm] >= 0:
+                l = which_l_mapping[final_rep_state.qm]
+
+                # left handside of eq.40 of the article
+                for k in range(l+1):
+                    if final_rep_state.decreased_is_valid(k, l):
+                        decreased_state = final_rep_state.get_gt_pattern_decrement(k, l)
+                        index = basis_final.index(decreased_state)
+                        final_rep_coeffs[ multi_mapping[index] ][ parent_mapping[final_rep_state.qm] ] += final_rep_state.compute_j_minus_component(k, l)
+
+                
+                # right handside of eq.40 of the article
+                for state_left in basis_1:
+                    i = state_left.qm
+                    
+                    for state_right in basis_2:
+                        j = state_right.qm
+                        
+                        # check for non-vanishing CGC
+                        cgc = self.get_CGC(i, j, alpha, final_rep_state.qm)
+                        if abs(cgc) > FLOAT_ZERO_PRECISION:
+                            for k in range(l+1):
+                                
+                                # left J+
+                                if state_left.decreased_is_valid(k, l):
+                                    decreased_state = state_left.get_gt_pattern_decrement(k, l)
+                                    index = basis_1.index(decreased_state)
+
+                                    if prod_states_mapping[index][j] < 0:
+                                        prod_states_mapping[index][j] = num_prod_states
+                                        num_prod_states += 1
+
+                                    prod_coeffs[ prod_states_mapping[index][j] ][ parent_mapping[final_rep_state.qm] ] += cgc * state_left.compute_j_minus_component(k,l)
+
+                                # right J+
+                                if state_right.decreased_is_valid(k, l):
+                                    decreased_state = state_right.get_gt_pattern_decrement(k, l)
+                                    index = basis_2.index(decreased_state)
+
+                                    if prod_states_mapping[i][index] < 0:
+                                        prod_states_mapping[i][index] = num_prod_states
+                                        num_prod_states += 1
+
+                                    prod_coeffs[ prod_states_mapping[i][index] ][ parent_mapping[final_rep_state.qm] ] += cgc * state_right.compute_j_minus_component(k,l)
+
+        # matrices ready   
+        #print(np.zeros((2,2)).shape)
+        print(f"{final_rep_coeffs.shape} vs {prod_coeffs.shape}")
+        lstsq_sol, residual, rank, singular_values = np.linalg.lstsq(final_rep_coeffs, prod_coeffs)
+        
+        for rep_final_qm in range(self.dim_final):
+            if multi_mapping[rep_final_qm] >= 0:
+                for i in range(self.dim_1):
+                    for j in range(self.dim_2):
+                        if prod_states_mapping[i][j] >= 0:
+                            cgc = lstsq_sol[ prod_states_mapping[i][j] ][ multi_mapping[rep_final_qm] ]
+                            if abs(cgc) > FLOAT_ZERO_PRECISION:
+                                self.set_cgc(i,j, alpha, rep_final_qm, cgc)
+
+                done[rep_final_qm] = True
+
+        return
+
+
+    def get_CGC(self, qm_1, qm_2, mult_index, qm_final):
+        return self.coefficients[qm_1, qm_2, mult_index, qm_final]
+    
+
+    def write_CGC(self, filepath : Path | str):
+        """Write all CGCs on 'filepath'."""
+        if type(filepath) != Path:
+            output_path = Path(filepath)
+        else:
+            output_path = filepath
+
+        with open(output_path, 'wb') as file:
+            pk.dump(self.coefficients, file)
+
+
+    def load_CGC(self, filepath : Path | str):
+        """Load CGCs from 'filepath'."""
+        if type(filepath) != Path:
+            input_path = Path(filepath)
+        else:
+            input_path = filepath
+
+        with open(input_path, 'rb') as file:
+            self.coefficients = pk.load(file)
+
+
+
 def sum_decompositions_list(decomp_list : list[tuple[SU_irrep, int]]):
 
     unique_decomposed_reps_list = []
@@ -844,7 +1204,7 @@ def test():
     if not bFound:
         raise Exception("Rep final not found in decomposition")
 
-    #my_list = CGC_list(rep, rep, rep_final, multiplicity)
+    my_list = CGC_list(rep, rep, rep_final, multiplicity)
 
     highest_state_final = rep_final.generate_highest_state()
 
@@ -856,7 +1216,7 @@ def test():
 
     m_index = highest_state_final.get_qm()
 
-    #print(my_list.get_CGC(m1_index, m2_index, 0, m_index))
+    print(my_list.get_CGC(m1_index, m2_index, 0, m_index))
 
 
 def test2():
