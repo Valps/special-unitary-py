@@ -924,42 +924,101 @@ class SU_multiple_decomposition():
 ##  Static functions
 ##
 
-def create_representation_list(N, horizontal_max) -> list[SU_irrep]:
+def create_representation_list(N, horizontal_max, ordering = "left-right") -> list[SU_irrep]:
     """Creates a list of SU(N) representations using Young Diagrams.
 
-    horizontal_max: The maximum number of boxes to the right on Young diagrams."""
-
-    def __reset__(iter: list, j: int):
-        """Flat the first 'j' indexes based on 'iter[j]' value."""
-        min_value = iter[j]
-        while j >= 0:
-            iter[j] = min_value
-            j -= 1
-        return iter
+    horizontal_max: The maximum number of boxes to the right on Young diagrams.
     
+    ordering: The basis ordering: "left-right" mode first fills the first row with boxes, then 
+    the second row and so on. "top-bottom" mode fills Young diagram columns from top to bottom.
+    
+    Example on SU(3):
+    "left-right":
+    (0,0,0)
+    (1,0,0)
+    (2,0,0)
+    ...
+    (horizontal_max, 0, 0)
+    (1, 1, 0)
+    ...
+
+    "top-bottom":
+    (0,0,0)
+    (1,0,0)
+    (1,1,0)
+    (2,0,0)
+    (2,1,0)
+    ...
+    """
+
     representation_list = []
 
-    iter = [ 0 for _ in range(N) ]
+    if ordering == "left-right":
 
-    while True:
+        def __reset__(iter: list, j: int):
+            """Flat the first 'j' indexes based on 'iter[j]' value."""
+            min_value = iter[j]
+            while j >= 0:
+                iter[j] = min_value
+                j -= 1
+            return iter
 
-        representation_list.append(SU_irrep(iter.copy()))
+        iter = [ 0 for _ in range(N) ]
 
-        # if the Young tableau is maximized for the cutoff horizontal_max, stop
-        if sum(iter) == horizontal_max*(N-1):
-            break
+        while True:
 
-        if iter[0] != horizontal_max:
-            iter[0] += 1
-        else:
+            representation_list.append(SU_irrep(iter.copy()))
 
-            for j in range(1, N-1):
-                if iter[j] + 1 <= iter[j-1]:
-                    iter[j] += 1
-                    iter = __reset__(iter, j)
+            # if the Young tableau is maximized for the cutoff horizontal_max, stop
+            if sum(iter) == horizontal_max*(N-1):
+                break
+
+            if iter[0] != horizontal_max:
+                iter[0] += 1
+            else:
+
+                for j in range(1, N-1):
+                    if iter[j] + 1 <= iter[j-1]:
+                        iter[j] += 1
+                        iter = __reset__(iter, j)
+                        break
+
+        return representation_list
+    
+    elif ordering == "top-bottom":
+
+        iter = [ 0 for _ in range(N) ]
+
+        first_row_boxes = 0
+
+        while True:
+
+            representation_list.append(SU_irrep(iter.copy()))
+
+            if sum(iter) == horizontal_max*(N-1):
+                break
+
+            # failed attempt
+
+            curr_idx = N-1 - 1      # 1 for array indexing, 1 for second to last one
+            while curr_idx != 0:
+                if iter[curr_idx] + 1 <= iter[curr_idx-1]:
+                    iter[curr_idx] += 1
                     break
+                else:
+                    iter[curr_idx] = 0
+                curr_idx -= 1
+            
+            if curr_idx == 0:   # didnt found index, so increment the first row
+                iter[0] += 1
+                for i in range(1, N):
+                    iter[i] = 0
 
-    return representation_list
+
+        return representation_list
+
+    else:
+        raise Exception(f"Unknown ordering type: {ordering}")
 
 def create_basis_states_list_for_rep(gt_i_weight : SU_irrep | list, crescent_order = True):
     """Given a SU(N) irreducible representation (i-weight) this function computes
@@ -1231,7 +1290,18 @@ def test2():
     print(SU_multiple_decomposition(rep_list))
 
 
+def test3():
+    rep_list_1 = create_representation_list(N=5, horizontal_max=4, ordering='top-bottom')
+    rep_list_2 = create_representation_list(N=5, horizontal_max=4)
+    assert len(rep_list_1) == len(rep_list_2)
+    for rep in rep_list_1:
+        print(rep)
+    print("#########")
+    for rep in rep_list_2:
+        print(rep)
+
 if __name__ == "__main__":
-    test()
+    #test()
     #test2()
+    test3()
 
