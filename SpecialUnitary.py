@@ -942,7 +942,7 @@ class SU_multiple_decomposition():
 ##  Static functions
 ##
 
-def create_representation_list(N, horizontal_max, ordering = "left-right") -> list[SU_irrep]:
+def create_representation_list(N, horizontal_max, ordering = "top-bottom") -> list[SU_irrep]:
     """Creates a list of SU(N) representations using Young Diagrams.
 
     horizontal_max: The maximum number of boxes to the right on Young diagrams.
@@ -1309,8 +1309,8 @@ def test2():
 
 
 def test3():
-    rep_list_1 = create_representation_list(N=5, horizontal_max=4, ordering='top-bottom')
-    rep_list_2 = create_representation_list(N=5, horizontal_max=4)
+    rep_list_1 = create_representation_list(N=5, horizontal_max=4)
+    rep_list_2 = create_representation_list(N=5, horizontal_max=4, ordering='left-right')
     assert len(rep_list_1) == len(rep_list_2)
     for rep in rep_list_1:
         print(rep)
