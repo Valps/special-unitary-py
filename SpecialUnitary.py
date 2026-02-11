@@ -7,7 +7,7 @@ Author: Valmir Peixôto
 
 import numpy as np
 import pickle as pk
-from math import sqrt
+from math import sqrt, comb
 from collections import defaultdict
 from pathlib import Path
 import copy
@@ -18,7 +18,7 @@ Q_M_START_INDEX = 0     # it must be 1 as it is defined on the article, but for 
 FLOAT_ZERO_PRECISION = 10**(-10)    # precision to define if a float number is zero
 
 class SU_irrep():
-    __slots__ = "i_weight", "N", "dim", "basis", "casimir2"
+    __slots__ = "i_weight", "N", "dim", "basis", "casimir2", "p_index"
 
     def __init__(self, irrep_array : list):
         """Initializate a SU(N) irredutible representation."""
@@ -32,6 +32,7 @@ class SU_irrep():
         self.dim = None
         self.basis = None
         self.casimir2 = None
+        self.p_index = None
 
 
     def get_basis(self, crescent_order = True) -> list['SU_state']:
@@ -114,6 +115,17 @@ class SU_irrep():
                 new_diagram[i] += 1
 
         return SU_irrep(new_diagram)
+    
+    def get_p_index(self):
+        """Compute P(S) for this representation."""
+        if self.p_index is not None:
+            return self.p_index
+        
+        sum_var = 0
+        for k in range(1, self.N):
+            sum_var += comb(self.N - k + self.i_weight[k-1] - 1, self.N - k)
+        self.p_index = sum_var
+        return self.p_index
 
     def generate_highest_state(self, crescent_order = True, compute_zweight = False) -> 'SU_state':
         """Generate the highest state (i.e. it's annihilated by any J+ operator)
@@ -410,7 +422,8 @@ class SU_decomposition():
     def __init__(self, 
                  rep_1 : SU_irrep, 
                  rep_2 : SU_irrep,
-                 decrescent_order = True):
+                 decrescent_order = True,
+                 rep_aux_list : list[SU_irrep] = None):
 
         """Decompose two SU(N) representations.
 
@@ -1300,8 +1313,16 @@ def test3():
     for rep in rep_list_2:
         print(rep)
 
+def test4():
+    rep_list = create_representation_list(N=6, horizontal_max=7)
+    for rep in rep_list:
+        #print(f"{rep} : {rep.get_p_index()}")
+        if rep_list[rep.get_p_index()] != rep:
+            raise
+
 if __name__ == "__main__":
     #test()
     #test2()
-    test3()
+    #test3()
+    test4()
 
