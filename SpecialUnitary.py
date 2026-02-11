@@ -479,8 +479,16 @@ class SU_decomposition():
 
         if rep_aux_list is not None:
             # considering that "rep_aux_list" have the ordering "top-bottom"
-            for i, unique_rep in enumerate(unique_decomposed_reps_list):
-                unique_decomposed_reps_list[i] = rep_aux_list[unique_rep.get_p_index()] # assign a new reference
+            new_unique_rep_list = []
+            max_idx = len(rep_aux_list) - 1
+            for unique_rep in unique_decomposed_reps_list:
+                p_index = unique_rep.get_p_index()
+                if p_index <= max_idx:
+                    new_unique_rep_list.append(rep_aux_list[p_index]) # assign a new reference
+                else:
+                    new_unique_rep_list.append(unique_rep)  # out of list rep
+
+            unique_decomposed_reps_list = new_unique_rep_list
 
         # now create tuples list
         self.decomposition = list(zip(unique_decomposed_reps_list, multiplicity_list))
