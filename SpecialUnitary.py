@@ -570,6 +570,7 @@ class CGC_list():
 
                 for qm_final in reversed(range(self.dim_final)):
                     if not done[qm_final]:
+                        #print(f"Test : {qm_final}")    # TODO: remove this
                         self.compute_CGC_lower_states(qm_final, mult_idx, done)
 
     def set_cgc(self,
@@ -643,7 +644,7 @@ class CGC_list():
 
                     #print(f"Match: {M_p_weight} + {MPrime_p_weight} = {HPrimePrime_p_weight}")
 
-                    coeff_mapping[state_left.qm][state_right.qm] = curr_column
+                    coeff_mapping[state_left.qm, state_right.qm] = curr_column
                     curr_column += 1
 
         num_cgcs = curr_column
@@ -653,7 +654,7 @@ class CGC_list():
         if num_cgcs == 1:
             for i in range(dim_1):
                 for j in range(dim_2):
-                    if coeff_mapping[i][j] >= 0:
+                    if coeff_mapping[i,j] >= 0:
                         self.set_cgc(i, j, 0, dim_final - 1, 1.0)       # Q(H'') = dim_final - 1
                         return
 
@@ -670,7 +671,7 @@ class CGC_list():
             for state_right in basis_2:
                 j = state_right.qm
 
-                if coeff_mapping[i][j] >= 0:
+                if coeff_mapping[i,j] >= 0:
                     
                     # iterate over all J+ operators
                     for l in range(self.N - 1):
@@ -685,12 +686,12 @@ class CGC_list():
                                 upper_1 = state_left.get_gt_pattern_increment(k,l)
                                 h = basis_1.index(upper_1)  # index on basis 1
 
-                                if state_mapping[h][j] < 0:
-                                    state_mapping[h][j] = num_states
+                                if state_mapping[h,j] < 0:
+                                    state_mapping[h,j] = num_states
                                     num_states += 1
 
                                 # matrix[row = state][column = cgc]
-                                matrix[ state_mapping[h][j] ][ coeff_mapping[i][j] ] += state_left.compute_j_plus_component(k,l)
+                                matrix[ state_mapping[h,j] , coeff_mapping[i,j] ] += state_left.compute_j_plus_component(k,l)
 
                             # right J+
                             if state_right.increased_is_valid(k,l):
@@ -699,12 +700,12 @@ class CGC_list():
                                 upper_2 = state_right.get_gt_pattern_increment(k,l)
                                 h = basis_2.index(upper_2)  # index on basis 2
 
-                                if state_mapping[i][h] < 0:
-                                    state_mapping[i][h] = num_states
+                                if state_mapping[i,h] < 0:
+                                    state_mapping[i,h] = num_states
                                     num_states += 1
 
                                 # matrix[row = state][column = cgc]
-                                matrix[ state_mapping[i][h] ][ coeff_mapping[i][j] ] += state_right.compute_j_plus_component(k,l)
+                                matrix[ state_mapping[i,h] , coeff_mapping[i,j] ] += state_right.compute_j_plus_component(k,l)
 
         # matrix is ready
         # solving rectangular matrix by singular value decomposition
@@ -728,9 +729,9 @@ class CGC_list():
         for mult_idx in range(self.multiplicity):
             for i in range(dim_1):
                 for j in range(dim_2):
-                    if coeff_mapping[i][j] >= 0:
+                    if coeff_mapping[i,j] >= 0:
                         # get the last rows of V^T (or the last columns of V), which are LI orthonormalized solutions
-                        coefficient = vt_matrix[ num_cgcs - self.multiplicity - 1 ][ coeff_mapping[i][j] ]
+                        coefficient = vt_matrix[ num_cgcs - self.multiplicity - 1 , coeff_mapping[i,j] ]
 
                         # verify if it's not zero
                         if abs(coefficient) > FLOAT_ZERO_PRECISION:
@@ -798,7 +799,7 @@ class CGC_list():
                     if final_rep_state.decreased_is_valid(k, l):
                         decreased_state = final_rep_state.get_gt_pattern_decrement(k, l)
                         index = basis_final.index(decreased_state)
-                        final_rep_coeffs[ multi_mapping[index] ][ parent_mapping[final_rep_state.qm] ] += final_rep_state.compute_j_minus_component(k, l)
+                        final_rep_coeffs[ multi_mapping[index] , parent_mapping[final_rep_state.qm] ] += final_rep_state.compute_j_minus_component(k, l)
 
                 
                 # right handside of eq.40 of the article
@@ -818,22 +819,22 @@ class CGC_list():
                                     decreased_state = state_left.get_gt_pattern_decrement(k, l)
                                     index = basis_1.index(decreased_state)
 
-                                    if prod_states_mapping[index][j] < 0:
-                                        prod_states_mapping[index][j] = num_prod_states
+                                    if prod_states_mapping[index,j] < 0:
+                                        prod_states_mapping[index,j] = num_prod_states
                                         num_prod_states += 1
 
-                                    prod_coeffs[ prod_states_mapping[index][j] ][ parent_mapping[final_rep_state.qm] ] += cgc * state_left.compute_j_minus_component(k,l)
+                                    prod_coeffs[ prod_states_mapping[index,j] , parent_mapping[final_rep_state.qm] ] += cgc * state_left.compute_j_minus_component(k,l)
 
                                 # right J+
                                 if state_right.decreased_is_valid(k, l):
                                     decreased_state = state_right.get_gt_pattern_decrement(k, l)
                                     index = basis_2.index(decreased_state)
 
-                                    if prod_states_mapping[i][index] < 0:
-                                        prod_states_mapping[i][index] = num_prod_states
+                                    if prod_states_mapping[i,index] < 0:
+                                        prod_states_mapping[i,index] = num_prod_states
                                         num_prod_states += 1
 
-                                    prod_coeffs[ prod_states_mapping[i][index] ][ parent_mapping[final_rep_state.qm] ] += cgc * state_right.compute_j_minus_component(k,l)
+                                    prod_coeffs[ prod_states_mapping[i,index] , parent_mapping[final_rep_state.qm] ] += cgc * state_right.compute_j_minus_component(k,l)
 
         # matrices ready   
         #print(np.zeros((2,2)).shape)
@@ -844,8 +845,8 @@ class CGC_list():
             if multi_mapping[rep_final_qm] >= 0:
                 for i in range(self.dim_1):
                     for j in range(self.dim_2):
-                        if prod_states_mapping[i][j] >= 0:
-                            cgc = lstsq_sol[ prod_states_mapping[i][j] ][ multi_mapping[rep_final_qm] ]
+                        if prod_states_mapping[i,j] >= 0:
+                            cgc = lstsq_sol[ prod_states_mapping[i,j] , multi_mapping[rep_final_qm] ]
                             if abs(cgc) > FLOAT_ZERO_PRECISION:
                                 self.set_cgc(i,j, alpha, rep_final_qm, cgc)
 
@@ -1263,8 +1264,8 @@ def test_old():
     #print(compute_bkl(su3_rep_states[-2]))
 
 
-def test():
-
+def test_CGC():
+    print("Testing CGC...")
     rep = SU_irrep([1,0,0])
     decomp = SU_decomposition(rep, rep)
 
@@ -1334,8 +1335,8 @@ def test4():
             raise
 
 if __name__ == "__main__":
-    #test()
+    test_CGC()
     #test2()
     #test3()
-    test4()
+    #test4()
 
