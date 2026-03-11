@@ -622,7 +622,8 @@ class CGC_list():
 
         HPrimePrime_p_weight = highest_state.get_p_weight()
 
-        #print(f"Highest state: {highest_state}")
+        print(f"Highest state: M = {highest_state.get_SU2_m()}")    # TODO: SU(2) only
+        raise Exception("TODO: test 'generate_highest_state' again...")
         #print(f"Its p-weight: {HPrimePrime_p_weight}")
 
         for state_left in basis_1:
@@ -638,7 +639,8 @@ class CGC_list():
 
                 sum_p_weight = [ i + j for i, j in zip(M_p_weight, MPrime_p_weight) ]
 
-                #print(f"Verifying for {state_left} and {state_right}")
+                print(f"Verifying for m1={state_left.get_SU2_m()} and m2={state_right.get_SU2_m()}")  # TODO: SU(2) only
+                print(f"{sum_p_weight} vs {HPrimePrime_p_weight}")
 
                 if compare_p_weights(sum_p_weight, HPrimePrime_p_weight):
 
@@ -663,7 +665,7 @@ class CGC_list():
 
         #print(f"Dimension of rep 1: {dim_1}")
         #print(f"Dimension of rep 2: {dim_2}")
-        #print(f"Matriz size: {matrix.shape}")
+        print(f"Matriz size: {matrix.shape}")
         
         for state_left in basis_1:
             i = state_left.qm
@@ -779,9 +781,10 @@ class CGC_list():
                     p_weight[l] += 1
                     p_weight[l+1] -= 1
 
-        
-        final_rep_coeffs = np.zeros((num_multi, num_parents))   # coefficients 'b'
-        prod_coeffs = np.zeros((self.dim_1 * self.dim_2, num_parents))
+        # OBS: (M, N) vs (M, K)
+
+        final_rep_coeffs = np.zeros((num_parents, num_multi))   # coefficients 'b'
+        prod_coeffs = np.zeros(num_parents, (self.dim_1 * self.dim_2))
 
         prod_states_mapping = np.full((self.dim_1, self.dim_2), -1)
 
@@ -799,7 +802,7 @@ class CGC_list():
                     if final_rep_state.decreased_is_valid(k, l):
                         decreased_state = final_rep_state.get_gt_pattern_decrement(k, l)
                         index = basis_final.index(decreased_state)
-                        final_rep_coeffs[ multi_mapping[index] , parent_mapping[final_rep_state.qm] ] += final_rep_state.compute_j_minus_component(k, l)
+                        final_rep_coeffs[ parent_mapping[final_rep_state.qm], multi_mapping[index] ] += final_rep_state.compute_j_minus_component(k, l)
 
                 
                 # right handside of eq.40 of the article
@@ -823,7 +826,7 @@ class CGC_list():
                                         prod_states_mapping[index,j] = num_prod_states
                                         num_prod_states += 1
 
-                                    prod_coeffs[ prod_states_mapping[index,j] , parent_mapping[final_rep_state.qm] ] += cgc * state_left.compute_j_minus_component(k,l)
+                                    prod_coeffs[ parent_mapping[final_rep_state.qm], prod_states_mapping[index,j] ] += cgc * state_left.compute_j_minus_component(k,l)
 
                                 # right J+
                                 if state_right.decreased_is_valid(k, l):
@@ -834,7 +837,7 @@ class CGC_list():
                                         prod_states_mapping[i,index] = num_prod_states
                                         num_prod_states += 1
 
-                                    prod_coeffs[ prod_states_mapping[i,index] , parent_mapping[final_rep_state.qm] ] += cgc * state_right.compute_j_minus_component(k,l)
+                                    prod_coeffs[ parent_mapping[final_rep_state.qm], prod_states_mapping[i,index] ] += cgc * state_right.compute_j_minus_component(k,l)
 
         # matrices ready   
         #print(np.zeros((2,2)).shape)
@@ -1264,7 +1267,7 @@ def test_old():
     #print(compute_bkl(su3_rep_states[-2]))
 
 
-def test_CGC():
+def test_get_particular_CGC():
     print("Testing CGC...")
     rep = SU_irrep([1,0,0])
     decomp = SU_decomposition(rep, rep)
@@ -1334,8 +1337,55 @@ def test4():
         if rep_list[rep.get_p_index()] != rep:
             raise
 
+
+def test_SU2():
+    print("Testing CGC...")
+    rep_1 = SU_irrep.generate_SU2_irrep(2)
+    rep_2 = SU_irrep.generate_SU2_irrep(3/2)
+    decomp = SU_decomposition(rep_1, rep_2)
+
+    rep_final = SU_irrep.generate_SU2_irrep(5/2)
+
+    my_CGC_list = CGC_list(rep_1, rep_2, rep_final)
+
+    return
+
+    #for rep_final, mult in decomp.decomposition:
+    #    assert mult == 1     # mult is always 1 ou 0 on SU(2)
+
+
+
+
+    rep_final = SU_irrep([1,1,0])
+
+    bFound = False
+    multiplicity = -1
+
+    for decomposed, mult in decomp.decomposition:
+        if rep_final == decomposed:
+            bFound = True
+            multiplicity = mult
+    
+    if not bFound:
+        raise Exception("Rep final not found in decomposition")
+
+    my_list = CGC_list(rep, rep, rep_final, multiplicity)
+
+
+def test_CGCs():
+    test_SU2()
+
+
+def test_highest_state():
+    rep_1 = SU_irrep([1,0])
+    print(rep_1.generate_highest_state())
+
+
 if __name__ == "__main__":
-    test_CGC()
+    #test_CGCs()
+    #test_get_particular_CGC()
+    test_highest_state()
+    
     #test2()
     #test3()
     #test4()
