@@ -12,7 +12,7 @@ from collections import defaultdict
 from pathlib import Path
 import copy
 
-#flag_warning = False
+flag_warning = False
 
 Q_M_START_INDEX = 0     # it must be 1 as it is defined on the article, but for array purposes it's better to be 0
 FLOAT_ZERO_PRECISION = 10**(-10)    # precision to define if a float number is zero
@@ -381,7 +381,7 @@ class SU_state():
         """Get SU(2) corresponding 'm' for this state."""
         assert self.N == 2
         j = self.irrep.get_SU2_j()
-        return j - self.gt_pattern[0][0]
+        return self.gt_pattern[0][0] - j
         
 
     def __str__(self):
@@ -560,7 +560,12 @@ class CGC_list():
 
             self.compute_CGC_highest_state()
 
+            global flag_warning
+
             # compute lower states CGCs
+            if not flag_warning:
+                print("Warning: it isnt computing lower CGCs yet!")
+                flag_warning = True
             return
 
             for mult_idx in range(multiplicity):
@@ -593,7 +598,8 @@ class CGC_list():
         """Computes the list of Clebsch-Gordan Coefficients for the highest weight state on the 
         final representation."""
 
-        def compare_p_weights(pw_1 : list[float], pw_2 : list[float]):
+        def compare_weights(pw_1 : list[float], pw_2 : list[float]):
+            """Check if two weights are equal."""
             for i in range(len(pw_1)):
                 if abs(pw_1[i] - pw_2[i]) > FLOAT_ZERO_PRECISION:
                     return False
@@ -620,37 +626,59 @@ class CGC_list():
         coeff_mapping = np.full((dim_1, dim_2), -1)
         state_mapping = np.full((dim_1, dim_2), -1)
 
-        HPrimePrime_p_weight = highest_state.get_p_weight()
+        HPrimePrime_z_weight = highest_state.get_z_weight()
 
-        print(f"Highest state: M = {highest_state.get_SU2_m()}")    # TODO: SU(2) only
-        raise Exception("TODO: test 'generate_highest_state' again...")
+        #if self.N == 2:
+        #    high_m = highest_state.get_SU2_m()
+        #    print(f"Highest final rep state: M = {high_m}")    # TODO: SU(2) only
+        #else:
+        #    high_m = -1
+        
         #print(f"Its p-weight: {HPrimePrime_p_weight}")
+
+        #print("####################\n")
 
         for state_left in basis_1:
 
-            M_p_weight = state_left.get_p_weight()
+            M_z_weight = state_left.get_z_weight()
 
             for state_right in basis_2:
 
-                MPrime_p_weight = state_right.get_p_weight()
+                MPrime_z_weight = state_right.get_z_weight()
 
                 # verify if there is a possibility of non-vanishing CGCs for these states
-                # the sum of p_weight's of the states must matches with the final state p_weight
+                # the sum of z_weight's of the states must matches with the final state z_weight
 
-                sum_p_weight = [ i + j for i, j in zip(M_p_weight, MPrime_p_weight) ]
+                sum_z_weight = [ i + j for i, j in zip(M_z_weight, MPrime_z_weight) ]
+                
 
-                print(f"Verifying for m1={state_left.get_SU2_m()} and m2={state_right.get_SU2_m()}")  # TODO: SU(2) only
-                print(f"{sum_p_weight} vs {HPrimePrime_p_weight}")
 
-                if compare_p_weights(sum_p_weight, HPrimePrime_p_weight):
+                # TODO: remove this later
+                if False:
+                    if self.N == 2 and abs(high_m - (state_left.get_SU2_m() + state_right.get_SU2_m())) < FLOAT_ZERO_PRECISION:
 
-                    #print(f"Match: {M_p_weight} + {MPrime_p_weight} = {HPrimePrime_p_weight}")
+                        print(f"Verifying for m1={state_left.get_SU2_m()} and m2={state_right.get_SU2_m()}")  # TODO: SU(2) only
+                        print(f"Separate p-weights: {M_z_weight} and {MPrime_z_weight}")
+                        print(f"Sum vs Target: {sum_z_weight} vs {HPrimePrime_z_weight}\n")
+                    
+
+
+
+
+
+                if compare_weights(sum_z_weight, HPrimePrime_z_weight):
+
+                    #print(f"Match: {M_z_weight} + {MPrime_z_weight} = {HPrimePrime_z_weight}")
 
                     coeff_mapping[state_left.qm, state_right.qm] = curr_column
                     curr_column += 1
 
+        #print("####################\n")
+
         num_cgcs = curr_column
         #print(f"Num of CGCs to be computed: {num_cgcs}")        # TODO: TO BE REMOVED
+
+        assert num_cgcs != 0
 
         # if it has 1 column (or 1 CGC), then the comparison is 1 to 1
         if num_cgcs == 1:
@@ -665,7 +693,7 @@ class CGC_list():
 
         #print(f"Dimension of rep 1: {dim_1}")
         #print(f"Dimension of rep 2: {dim_2}")
-        print(f"Matriz size: {matrix.shape}")
+        #print(f"Matriz size: {matrix.shape}")
         
         for state_left in basis_1:
             i = state_left.qm
@@ -725,7 +753,7 @@ class CGC_list():
         
         # the number of zero singular values must match the multiplicity, since it has 'multiplicity' linearly independent solutions
         if num_zero_singular_values != self.multiplicity:
-            raise Exception(f"The number of zero singular values ({num_zero_singular_values}) do not match the given multiplicity ({self.multiplicity})")
+            raise Exception(f"The number of zero singular values ({num_zero_singular_values}) does not match the given multiplicity ({self.multiplicity})")
 
         # now retrieve the CGC's from the singular value decomposition
         for mult_idx in range(self.multiplicity):
@@ -745,7 +773,7 @@ class CGC_list():
         """Computes the list of Clebsch-Gordan Coefficients for the lower weight states on the 
         final representation, assuming that the highest weight state CGCs were computed before."""
 
-        state_weight = np.array( self.rep_final.get_basis()[qm_final].get_p_weight() )
+        state_weight = np.array( self.rep_final.get_basis()[qm_final].get_z_weight() )
 
         parent_mapping = np.full((self.dim_final), -1)
         multi_mapping = np.full((self.dim_final), -1)
@@ -758,18 +786,18 @@ class CGC_list():
 
         for final_rep_state in basis_final:
 
-            p_weight = np.array( final_rep_state.get_p_weight() )
+            z_weight = np.array( final_rep_state.get_z_weight() )
 
-            if np.isclose(p_weight, state_weight).all():    #p_weight == state_weight:
+            if np.isclose(z_weight, state_weight).all():    #z_weight == state_weight:
                 multi_mapping[final_rep_state.qm] = num_multi
                 num_multi += 1
             else:
                 for l in range(self.N - 1):
                     
-                    p_weight[l] -= 1
-                    p_weight[l+1] += 1
+                    z_weight[l] -= 1
+                    z_weight[l+1] += 1
 
-                    if np.isclose(p_weight, state_weight).all(): #p_weight == state_weight:
+                    if np.isclose(z_weight, state_weight).all(): #z_weight == state_weight:
                         parent_mapping[final_rep_state.qm] = num_parents
                         num_parents += 1
                         which_l_mapping[final_rep_state.qm] = l
@@ -778,8 +806,8 @@ class CGC_list():
                             self.compute_CGC_lower_states(final_rep_state.qm, alpha, done)
                         break
 
-                    p_weight[l] += 1
-                    p_weight[l+1] -= 1
+                    z_weight[l] += 1
+                    z_weight[l+1] -= 1
 
         # OBS: (M, N) vs (M, K)
 
@@ -859,7 +887,10 @@ class CGC_list():
 
 
     def get_CGC(self, qm_1, qm_2, mult_index, qm_final):
-        return self.coefficients[qm_1, qm_2, mult_index, qm_final]
+        if mult_index <= self.multiplicity - 1:
+            return self.coefficients[qm_1, qm_2, mult_index, qm_final]
+        else:
+            raise Exception(f"Requested multiplicity index {mult_index} above maximum: {self.multiplicity - 1}")
     
 
     def write_CGC(self, filepath : Path | str):
@@ -1184,8 +1215,8 @@ def generate_SU2_state(j, m) -> 'SU_state':
     """Initializate a SU(2) state for 'j' and 'm'."""
     assert abs(m) <= j      # sanity check
 
-    state_array = [ [round(2*j), 0], 
-                    [round(j-m)] ]
+    state_array = [ [round(j+m)],
+                   [round(2*j), 0] ]
     
     return SU_state(state_array)
 
@@ -1338,53 +1369,125 @@ def test4():
             raise
 
 
-def test_SU2():
+def test_SU2_specific_CGC():
     print("Testing CGC...")
-    rep_1 = SU_irrep.generate_SU2_irrep(2)
-    rep_2 = SU_irrep.generate_SU2_irrep(3/2)
-    decomp = SU_decomposition(rep_1, rep_2)
 
-    rep_final = SU_irrep.generate_SU2_irrep(5/2)
+    j1, m1, j2, m2, J, M    =   2, 2    ,    3/2 , 1/2    ,    5/2 , 5/2
+
+
+    rep_1 = SU_irrep.generate_SU2_irrep(j1)
+    rep_2 = SU_irrep.generate_SU2_irrep(j2)
+
+    rep_final = SU_irrep.generate_SU2_irrep(J)
+
+    #print(f"Initial reps: {rep_1}, {rep_2}; final rep: {rep_final}")
+    print(f"j1 = {rep_1.get_SU2_j()}, j2 = {rep_2.get_SU2_j()}, J = {rep_final.get_SU2_j()}")
 
     my_CGC_list = CGC_list(rep_1, rep_2, rep_final)
 
-    return
+    state_1 = generate_SU2_state(j1, m1)
+    state_2 = generate_SU2_state(j2, m2)
 
-    #for rep_final, mult in decomp.decomposition:
-    #    assert mult == 1     # mult is always 1 ou 0 on SU(2)
+    final_state = generate_SU2_state(J, M)
+
+    print(f"m1 = {state_1.get_SU2_m()}, m2 = {state_2.get_SU2_m()}, M = {final_state.get_SU2_m()}\n")
+
+    my_cgc = my_CGC_list.get_CGC(state_1.get_qm(), state_2.get_qm(), 0, final_state.get_qm())
+    print(f"CGC = {my_cgc}, squared = {my_cgc**2}")
 
 
 
 
-    rep_final = SU_irrep([1,1,0])
+def test_SU2_CGCs():
 
-    bFound = False
-    multiplicity = -1
+    j1,     j2,     J = (
+    2,      3/2,    5/2)
 
-    for decomposed, mult in decomp.decomposition:
-        if rep_final == decomposed:
-            bFound = True
-            multiplicity = mult
+    rep_1 = SU_irrep.generate_SU2_irrep(j1)
+    rep_2 = SU_irrep.generate_SU2_irrep(j2)
+
+    rep_final = SU_irrep.generate_SU2_irrep(J)
     
-    if not bFound:
-        raise Exception("Rep final not found in decomposition")
+    print(f"Creating CGCs for j1 = {rep_1.get_SU2_j()}, j2 = {rep_2.get_SU2_j()}, J = {rep_final.get_SU2_j()}")
 
-    my_list = CGC_list(rep, rep, rep_final, multiplicity)
+    my_CGC_list = CGC_list(rep_1, rep_2, rep_final)
+
+    basis_1 = rep_1.get_basis()
+    basis_2 = rep_2.get_basis()
+    basis_final = rep_final.get_basis()
+
+    for state_1 in basis_1:
+        qm_1 = state_1.get_qm()
+
+        for state_2 in basis_2:
+            qm_2 = state_2.get_qm()
+
+            for state_final in basis_final:
+                qm_final = state_final.get_qm()
+
+                my_CGC = my_CGC_list.get_CGC(qm_1, qm_2, 0, qm_final)
+                if my_CGC != 0:
+                    print(f"m1 = {state_1.get_SU2_m()}, m2 = {state_2.get_SU2_m()}, M = {state_final.get_SU2_m()}, CGC = {my_CGC}, CGC**2 = {my_CGC**2}")
+
+
+
+
+
+def test_error_assert_exceptions():
+    """Catch possible exceptions on CGC calculation..."""
+    su2_reps = create_representation_list(N=2, horizontal_max=15)
+
+    errors = 0
+
+    print("SU(2) testing...")
+    print(f"Num of reps: {len(su2_reps)}")
+    for rep_1 in su2_reps:
+        for rep_2 in su2_reps:
+            for rep_final in su2_reps:
+                try:
+                    CGC_list(rep_1, rep_2, rep_final)
+                except:
+                    print(f"Fail for {rep_1}, {rep_2} and {rep_final}")
+                    errors += 1
+
+    su3_reps = create_representation_list(N=3, horizontal_max=5)
+
+    print("\nSU(3) testing...")
+    print(f"Num of reps: {len(su3_reps)}")
+    for rep_1 in su3_reps:
+        for rep_2 in su3_reps:
+            for rep_final in su3_reps:
+                try:
+                    CGC_list(rep_1, rep_2, rep_final)
+                except:
+                    print(f"Fail for {rep_1}, {rep_2} and {rep_final}")
+                    errors += 1
+
+    if errors == 0:
+        print("\nSuccess!\n")
 
 
 def test_CGCs():
-    test_SU2()
+    #test_error_assert_exceptions()
+    #test_SU2_specific_CGC()
+    test_SU2_CGCs()
 
 
 def test_highest_state():
     rep_1 = SU_irrep([1,0])
-    print(rep_1.generate_highest_state())
+    highest_state = rep_1.generate_highest_state()
+    print(highest_state, f"m = {highest_state.get_SU2_m()}")
 
+def test_decomp():
+    rep1 = SU_irrep([3,1,0])
+    rep2 = SU_irrep([5,4,0])
+    print(SU_decomposition(rep1, rep2))
 
 if __name__ == "__main__":
-    #test_CGCs()
+    #test_decomp()
+    test_CGCs()
     #test_get_particular_CGC()
-    test_highest_state()
+    #test_highest_state()
     
     #test2()
     #test3()
