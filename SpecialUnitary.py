@@ -553,13 +553,13 @@ class CGC_list():
 
             self.compute_CGC_highest_state()
 
-            global flag_warning
+            #global flag_warning
 
             # compute lower states CGCs
-            if not flag_warning:
-                print("Warning: it isnt computing lower CGCs yet!")
-                flag_warning = True
-            return
+            #if not flag_warning:
+            #    print("Warning: it isnt computing lower CGCs yet!")
+            #    flag_warning = True
+            #return
 
             for mult_idx in range(multiplicity):
 
@@ -785,7 +785,7 @@ class CGC_list():
                 multi_mapping[final_rep_state.qm] = num_multi
                 num_multi += 1
             else:
-                for l in range(self.N - 1):
+                for l in range(self.N - 2):  # l = 1, l < N   ; subtract 2, one for "<", one for its index nature starting from 0
                     
                     z_weight[l] -= 1
                     z_weight[l+1] += 1
@@ -805,7 +805,7 @@ class CGC_list():
         # OBS: (M, N) vs (M, K)
 
         final_rep_coeffs = np.zeros((num_parents, num_multi))   # coefficients 'b'
-        prod_coeffs = np.zeros(num_parents, (self.dim_1 * self.dim_2))
+        prod_coeffs = np.zeros((num_parents, self.dim_1 * self.dim_2))
 
         prod_states_mapping = np.full((self.dim_1, self.dim_2), -1)
 
@@ -862,8 +862,8 @@ class CGC_list():
 
         # matrices ready   
         #print(np.zeros((2,2)).shape)
-        print(f"{final_rep_coeffs.shape} vs {prod_coeffs.shape}")
-        lstsq_sol, residual, rank, singular_values = np.linalg.lstsq(final_rep_coeffs, prod_coeffs)
+        #print(f"{final_rep_coeffs.shape} vs {prod_coeffs.shape}")
+        lstsq_sol, residual, rank, singular_values = np.linalg.lstsq(final_rep_coeffs, prod_coeffs, rcond=None)  # rcond to silence warning
         
         for rep_final_qm in range(self.dim_final):
             if multi_mapping[rep_final_qm] >= 0:
