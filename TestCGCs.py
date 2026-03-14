@@ -1,5 +1,6 @@
 from SpecialUnitary import * #SU_irrep, SU_state, SU_decomposition, CGC_list, generate_SU2_irrep
-
+from sympy.physics.wigner import clebsch_gordan
+import numpy as np
 
 ############### Test functions
 
@@ -222,13 +223,13 @@ def test_error_assert_exceptions():
                     print(f"Fail for {rep_1}, {rep_2} and {rep_final}")
                     errors += 1
 
-    su3_reps = create_representation_list(N=3, horizontal_max=4)
+    reps_list = create_representation_list(N=3, horizontal_max=4)
 
     print("\nSU(3) testing...")
-    print(f"Num of reps: {len(su3_reps)}")
-    for rep_1 in su3_reps:
-        for rep_2 in su3_reps:
-            for rep_final in su3_reps:
+    print(f"Num of reps: {len(reps_list)}")
+    for rep_1 in reps_list:
+        for rep_2 in reps_list:
+            for rep_final in reps_list:
                 try:
                     CGC_list(rep_1, rep_2, rep_final)
                 except:
@@ -246,8 +247,8 @@ def test_CGCs():
     #test_SU2_CGCs(4/2, 3/2, 5/2)
     #test_SU2_CGCs(6/2, 5/2, 9/2)
     #test_SU2_CGCs(1, 1/2, 1/2)
-    test_SU2_CGCs(5, 3, 8)
-    test_SU2_CGCs(5, 3, 7)
+    #test_SU2_CGCs(5, 3, 8)
+    test_SU2_CGCs(10, 4, 10)
     #test_SU2_CGCs(5, 3, 6)
     #test_SU2_CGCs(5, 3, 5)
     #test_SU2_CGCs(5, 3, 4)
@@ -274,7 +275,8 @@ def is_CGC_list_orthogonal_type_1(cgc_list : CGC_list) -> bool:
                                         *  (cgc_list.get_CGC(M.get_qm(), Mp.get_qm(), alpha_t, Mpp_t.get_qm())).conjugate()  )
 
                     if abs(sum_var - expected_result) > FLOAT_ZERO_PRECISION:
-                        errors += 1
+                        print(f"{sum_var:.6f} vs {expected_result} for {cgc_list.rep_1} x {cgc_list.rep_2} = {cgc_list.rep_final}; alpha: {alpha}, alpha_t: {alpha_t}, Mpp:{Mpp.get_qm()}, Mpp_t:{Mpp_t.get_qm()}")
+                        return False #errors += 1
     
     return (True if not errors else False)
 
@@ -301,39 +303,39 @@ def is_CGC_list_orthogonal_type_2(cgc_list : CGC_list) -> bool:
                                         *  (cgc_list.get_CGC(M_t.get_qm(), Mp_t.get_qm(), alpha, Mpp.get_qm())).conjugate()  )
 
                     if abs(sum_var - expected_result) > FLOAT_ZERO_PRECISION:
-                        print(f"{sum_var:.6f} vs {expected_result}")
+                        #print(f"{sum_var:.6f} vs {expected_result}")
                         return False #errors += 1
     
     return (True if not errors else False)
 
 
 def test_CGCs_orthogonality():
+    print("Testing created CGCs orthogonality...")
 
-    N = 2
-    hor_max = 10
+    N, hor_max = (3, 3) #(2,5) #(3, 2) #(2, 10)
 
-    su3_reps = create_representation_list(N=N, horizontal_max=hor_max)
+    reps_list = create_representation_list(N=N, horizontal_max=hor_max)
 
     matches = 0
     errors = 0
 
     print(f"Testing CGC's orthogonality for SU({N})...")
-    print(f"Num of reps: {len(su3_reps)}")
+    print(f"Num of reps: {len(reps_list)}")
 
-    num_iterations = len(su3_reps) ** 2
+    num_iterations = len(reps_list) ** 2
     iterations = 0
 
-    for rep_1 in su3_reps:
-        for rep_2 in su3_reps:
+    for rep_1 in reps_list:
+        for rep_2 in reps_list:
             for rep_final, mult in SU_decomposition(rep_1, rep_2).decomposition:
                 my_cgc_list = CGC_list(rep_1, rep_2, rep_final, mult)
-                if is_CGC_list_orthogonal_type_2(my_cgc_list):# and is_CGC_list_orthogonal_type_2(my_cgc_list):
+                if is_CGC_list_orthogonal_type_1(my_cgc_list):# and is_CGC_list_orthogonal_type_2(my_cgc_list):
                     matches += 1
                 else:
                     errors += 1
                 
             iterations += 1
-            #print(f"Matches: {matches}, Errors: {errors}, Progress: {(iterations/num_iterations):.1%}", end=' \r')
+            print(f"Matches: {matches}, Errors: {errors}, Progress: {(iterations/num_iterations):.1%}", end=' \r')
     
     print(f"Matches: {matches}, Errors: {errors}")
     print("Finished!")
@@ -342,7 +344,131 @@ def test_CGCs_orthogonality():
 
 
 
+
+
+
+
+#############################################
+############ test test-functions ############
+#############################################
+
+
+def orthog_type_1(j1, j2, J):
+    errors = 0
+    for Mpp in np.arange(-J, J+1, 1):          # M''
+        for Mpp_t in np.arange(-J, J+1, 1):    # M'' tilde
+            
+            # expected result from deltas
+            expected_result = 1 if (Mpp == Mpp_t) else 0
+            
+            # now test combination
+            sum_var = 0
+            for M in np.arange(-j1, j1+1, 1):      # M
+                for Mp in np.arange(-j2, j2+1, 1):    # M'
+
+                    sum_var += (clebsch_gordan(j1, j2, J, M, Mp, Mpp) * clebsch_gordan(j1, j2, J, M, Mp, Mpp_t)).evalf()  #(cgc_list.get_CGC(M.get_qm(), Mp.get_qm(), 0, Mpp.get_qm()) 
+                               # *  (cgc_list.get_CGC(M.get_qm(), Mp.get_qm(), 0, Mpp_t.get_qm())).conjugate()  )
+
+            if abs(sum_var - expected_result) > FLOAT_ZERO_PRECISION:
+                print(f"{sum_var:.6f} vs {expected_result} ")   # for {cgc_list.rep_1} x {cgc_list.rep_2} = {cgc_list.rep_final}; alpha: {alpha}, alpha_t: {alpha_t}, Mpp:{Mpp.get_qm()}, Mpp_t:{Mpp_t.get_qm()}
+                return False #errors += 1
+    
+    return (True if not errors else False)
+
+
+
+
+
+
+
+
+def orthog_type_2(j1, j2, J):
+    errors = 0
+    for M in np.arange(-j1, j1+1, 1):                    # M
+        for Mp in np.arange(-j2, j2+1, 1):               # M'
+            for M_t in np.arange(-j2, j2+1, 1):           # M~
+                for Mp_t in np.arange(-j2, j2+1, 1):       # M'~
+                    # expected result from deltas
+                    expected_result = 1 if (M == M_t and Mp == Mp_t) else 0
+                    
+                    # now test combination
+                    sum_var = 0
+                    for Mpp in np.arange(-J, J+1, 1):      # M''
+                        sum_var += (clebsch_gordan(j1, j2, J, M, Mp, Mpp) * clebsch_gordan(j1, j2, J, M_t, Mp_t, Mpp)).evalf()  #(cgc_list.get_CGC(M.get_qm(), Mp.get_qm(), 0, Mpp.get_qm()) 
+                                    # *  (cgc_list.get_CGC(M.get_qm(), Mp.get_qm(), 0, Mpp_t.get_qm())).conjugate()  )
+
+                    if abs(sum_var - expected_result) > FLOAT_ZERO_PRECISION:
+                        #print(f"{sum_var:.6f} vs {expected_result} ")   # for {cgc_list.rep_1} x {cgc_list.rep_2} = {cgc_list.rep_final}; alpha: {alpha}, alpha_t: {alpha_t}, Mpp:{Mpp.get_qm()}, Mpp_t:{Mpp_t.get_qm()}
+                        return False #errors += 1
+    
+    return (True if not errors else False)
+
+
+    errors = 0
+    
+    for M in cgc_list.rep_1.get_basis():                    # M
+        for Mp in cgc_list.rep_2.get_basis():               # M'
+            for M_t in cgc_list.rep_1.get_basis():          # M~
+                for Mp_t in cgc_list.rep_2.get_basis():     # M'~
+                    
+                    # expected result from deltas
+                    expected_result = 1 if (M == M_t and Mp == Mp_t) else 0
+                    
+                    # now test combination
+                    sum_var = 0
+                    for Mpp in cgc_list.rep_final.get_basis():      # M''
+                        for alpha in range(cgc_list.multiplicity):    # alpha
+
+                            sum_var += (cgc_list.get_CGC(M.get_qm(), Mp.get_qm(), alpha, Mpp.get_qm()) 
+                                        *  (cgc_list.get_CGC(M_t.get_qm(), Mp_t.get_qm(), alpha, Mpp.get_qm())).conjugate()  )
+
+                    if abs(sum_var - expected_result) > FLOAT_ZERO_PRECISION:
+                        print(f"{sum_var:.6f} vs {expected_result}")
+                        return False #errors += 1
+    
+    return (True if not errors else False)
+
+
+
+
+
+def test_orthogonality_functions():
+    print("Testing orthogonality python-coded functions...")
+
+    N, hor_max = (2,5) #(3, 2) #(2, 10)
+
+    reps_list = create_representation_list(N=N, horizontal_max=hor_max)
+
+    matches = 0
+    errors = 0
+
+    print(f"Num of reps: {len(reps_list)}")
+
+    num_iterations = len(reps_list) ** 2
+    iterations = 0
+
+    for rep_1 in reps_list:
+        for rep_2 in reps_list:
+            for rep_final, mult in SU_decomposition(rep_1, rep_2).decomposition:
+                if orthog_type_1(rep_1.get_SU2_j(), rep_2.get_SU2_j(), rep_final.get_SU2_j()): #is_CGC_list_orthogonal_type_1(my_cgc_list):# and is_CGC_list_orthogonal_type_2(my_cgc_list):
+                    matches += 1
+                else:
+                    errors += 1
+                
+            iterations += 1
+            print(f"Matches: {matches}, Errors: {errors}, Progress: {(iterations/num_iterations):.1%}", end=' \r')
+    
+    print(f"Matches: {matches}, Errors: {errors}")
+    print("Finished!")
+
+
+
+
+
+
 if __name__ == "__main__":
     #test_CGCs()
     #test_get_particular_CGC()
+
     test_CGCs_orthogonality()
+    #test_orthogonality_functions()
