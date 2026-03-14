@@ -555,11 +555,12 @@ class CGC_list():
 
             #global flag_warning
 
-            # compute lower states CGCs
             #if not flag_warning:
             #    print("Warning: it isnt computing lower CGCs yet!")
             #    flag_warning = True
             #return
+        
+            # now compute lower states CGCs
 
             for mult_idx in range(multiplicity):
 
@@ -615,7 +616,7 @@ class CGC_list():
         curr_column = 0     # the column size is the number of CGCs to be computed
         num_states = 0
 
-        # we need to exclude the states which their p-weight sum does not matches the highest state p-weight on final representation
+        # we need to exclude the states which their z-weight sum does not matches the highest state z-weight on final representation
         coeff_mapping = np.full((dim_1, dim_2), -1)
         state_mapping = np.full((dim_1, dim_2), -1)
 
@@ -630,6 +631,8 @@ class CGC_list():
         #print(f"Its p-weight: {HPrimePrime_p_weight}")
 
         #print("####################\n")
+
+        # Setting the number of CGCs to be computed, as well as populate coeff_mapping
 
         for state_left in basis_1:
 
@@ -673,6 +676,8 @@ class CGC_list():
 
         assert num_cgcs != 0
 
+        # Ok
+
         # if it has 1 column (or 1 CGC), then the comparison is 1 to 1
         if num_cgcs == 1:
             for i in range(dim_1):
@@ -707,7 +712,7 @@ class CGC_list():
 
                                 # get corresponding upper state for k and l
                                 upper_1 = state_left.get_gt_pattern_increment(k,l)
-                                h = basis_1.index(upper_1)  # index on basis 1
+                                h = basis_1.index(upper_1)  # index on basis 1       # TODO: test performance for .get_qm()
 
                                 if state_mapping[h,j] < 0:
                                     state_mapping[h,j] = num_states
@@ -721,7 +726,7 @@ class CGC_list():
 
                                 # get corresponding upper state for k and l
                                 upper_2 = state_right.get_gt_pattern_increment(k,l)
-                                h = basis_2.index(upper_2)  # index on basis 2
+                                h = basis_2.index(upper_2)  # index on basis 2       # TODO: test performance for .get_qm()
 
                                 if state_mapping[i,h] < 0:
                                     state_mapping[i,h] = num_states
@@ -736,7 +741,7 @@ class CGC_list():
         #print(f"matrix to be solved: {matrix}")
         
         u_matrix, singular_values_desc_order, vt_matrix = np.linalg.svd(matrix, compute_uv=True)
-        
+
         num_zero_singular_values = 0
 
         # count the zero singular values
@@ -754,7 +759,7 @@ class CGC_list():
                 for j in range(dim_2):
                     if coeff_mapping[i,j] >= 0:
                         # get the last rows of V^T (or the last columns of V), which are LI orthonormalized solutions
-                        coefficient = vt_matrix[ num_cgcs - self.multiplicity - 1 , coeff_mapping[i,j] ]
+                        coefficient = vt_matrix[ coeff_mapping[i,j], num_cgcs - self.multiplicity - 1 ]
 
                         # verify if it's not zero
                         if abs(coefficient) > FLOAT_ZERO_PRECISION:
@@ -871,7 +876,7 @@ class CGC_list():
                 for i in range(self.dim_1):
                     for j in range(self.dim_2):
                         if prod_states_mapping[i,j] >= 0:
-                            cgc = lstsq_sol[ multi_mapping[rep_final_qm], prod_states_mapping[i,j] ]
+                            cgc = lstsq_sol[ multi_mapping[rep_final_qm], prod_states_mapping[i,j] ]    # OBS: Maybe need to swap matrix indices
                             if abs(cgc) > FLOAT_ZERO_PRECISION:
                                 self.set_cgc(i,j, alpha, rep_final_qm, cgc)
 
@@ -1212,7 +1217,7 @@ def generate_SU2_irrep(j : float) -> SU_irrep:
     
     return SU_irrep(state_array)
 
-def generate_SU2_state(j, m) -> 'SU_state':
+def generate_SU2_state(j, m) -> SU_state:
     """Initializate a SU(2) state for 'j' and 'm'."""
     assert abs(m) <= j      # sanity check
 
@@ -1220,6 +1225,39 @@ def generate_SU2_state(j, m) -> 'SU_state':
                    [round(2*j), 0] ]
     
     return SU_state(state_array)
+
+def get_SU2_CGC(j_1, j_2, j_3, m_1, m_2, m_3) -> float:
+    """OBS: Very inefficient function, but useful for testing."""
+    rep_1 = generate_SU2_irrep(j_1)
+    rep_2 = generate_SU2_irrep(j_2)
+
+    rep_final = generate_SU2_irrep(j_3)
+
+    #print(f"Initial reps: {rep_1}, {rep_2}; final rep: {rep_final}")
+    #print(f"j1 = {rep_1.get_SU2_j()}, j2 = {rep_2.get_SU2_j()}, J = {rep_final.get_SU2_j()}")
+
+    my_CGC_list = CGC_list(rep_1, rep_2, rep_final)
+
+    state_1 = generate_SU2_state(j_1, m_1)
+    state_2 = generate_SU2_state(j_2, m_2)
+
+    final_state = generate_SU2_state(j_3, m_3)
+
+    #print(f"m1 = {state_1.get_SU2_m()}, m2 = {state_2.get_SU2_m()}, M = {final_state.get_SU2_m()}\n")
+
+    return my_CGC_list.get_CGC(state_1.get_qm(), state_2.get_qm(), 0, final_state.get_qm())
+
+
+
+
+
+
+
+
+
+
+
+############### Test functions
 
 def test_old():
     rep = SU_irrep([2,1,0])
@@ -1399,17 +1437,19 @@ def test_SU2_specific_CGC():
 
 
 
-def test_SU2_CGCs():
+def test_SU2_CGCs(j1, j2, J):
 
-    j1,     j2,     J = (
-    2,      3/2,    5/2)
+    #get_SU2_CGC(2, 3/2, )
+
+    #j1,     j2,     J = (
+    #2,      3/2,    5/2)
 
     rep_1 = generate_SU2_irrep(j1)
     rep_2 = generate_SU2_irrep(j2)
 
     rep_final = generate_SU2_irrep(J)
     
-    print(f"Creating CGCs for j1 = {rep_1.get_SU2_j()}, j2 = {rep_2.get_SU2_j()}, J = {rep_final.get_SU2_j()}")
+    print(f"\nCreating CGCs for j1 = {rep_1.get_SU2_j()}, j2 = {rep_2.get_SU2_j()}, J = {rep_final.get_SU2_j()}")
 
     my_CGC_list = CGC_list(rep_1, rep_2, rep_final)
 
@@ -1428,7 +1468,7 @@ def test_SU2_CGCs():
 
                 my_CGC = my_CGC_list.get_CGC(qm_1, qm_2, 0, qm_final)
                 if my_CGC != 0:
-                    print(f"m1 = {state_1.get_SU2_m()}, m2 = {state_2.get_SU2_m()}, M = {state_final.get_SU2_m()}, CGC = {my_CGC}, CGC**2 = {my_CGC**2}")
+                    print(f"m1 = {state_1.get_SU2_m()}, m2 = {state_2.get_SU2_m()}, M = {state_final.get_SU2_m()}, CGC = {my_CGC}, 7*CGC**2 = {7*my_CGC**2}")
 
 
 
@@ -1451,7 +1491,7 @@ def test_error_assert_exceptions():
                     print(f"Fail for {rep_1}, {rep_2} and {rep_final}")
                     errors += 1
 
-    su3_reps = create_representation_list(N=3, horizontal_max=5)
+    su3_reps = create_representation_list(N=3, horizontal_max=4)
 
     print("\nSU(3) testing...")
     print(f"Num of reps: {len(su3_reps)}")
@@ -1471,7 +1511,9 @@ def test_error_assert_exceptions():
 def test_CGCs():
     #test_error_assert_exceptions()
     #test_SU2_specific_CGC()
-    test_SU2_CGCs()
+    #test_SU2_CGCs(2, 3/2, 7/2)
+    test_SU2_CGCs(2, 3/2, 5/2)
+    #test_SU2_CGCs(1/2, 1/2, 0)
 
 
 def test_highest_state():
