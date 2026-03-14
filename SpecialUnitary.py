@@ -137,13 +137,6 @@ class SU_irrep():
         return self.i_weight[0] == 0
     
     # SU(2) functions
-
-    def generate_SU2_irrep(j : float) -> 'SU_irrep':
-        """Initializate a SU(2) representation for 'j'."""
-
-        state_array = [round(2*j), 0]
-        
-        return SU_irrep(state_array)
     
     def get_SU2_j(self) -> float:
         """Get SU(2) corresponding 'j' for this representation."""
@@ -1211,6 +1204,13 @@ def extract_decomposition(state : SU_state, t_array : list):
 def is_trivial_rep(rep : SU_irrep):
     return rep.i_weight[0] == 0
 
+def generate_SU2_irrep(j : float) -> SU_irrep:
+    """Initializate a SU(2) representation for 'j'."""
+
+    state_array = [round(2*j), 0]
+    
+    return SU_irrep(state_array)
+
 def generate_SU2_state(j, m) -> 'SU_state':
     """Initializate a SU(2) state for 'j' and 'm'."""
     assert abs(m) <= j      # sanity check
@@ -1375,10 +1375,10 @@ def test_SU2_specific_CGC():
     j1, m1, j2, m2, J, M    =   2, 2    ,    3/2 , 1/2    ,    5/2 , 5/2
 
 
-    rep_1 = SU_irrep.generate_SU2_irrep(j1)
-    rep_2 = SU_irrep.generate_SU2_irrep(j2)
+    rep_1 = generate_SU2_irrep(j1)
+    rep_2 = generate_SU2_irrep(j2)
 
-    rep_final = SU_irrep.generate_SU2_irrep(J)
+    rep_final = generate_SU2_irrep(J)
 
     #print(f"Initial reps: {rep_1}, {rep_2}; final rep: {rep_final}")
     print(f"j1 = {rep_1.get_SU2_j()}, j2 = {rep_2.get_SU2_j()}, J = {rep_final.get_SU2_j()}")
@@ -1403,10 +1403,10 @@ def test_SU2_CGCs():
     j1,     j2,     J = (
     2,      3/2,    5/2)
 
-    rep_1 = SU_irrep.generate_SU2_irrep(j1)
-    rep_2 = SU_irrep.generate_SU2_irrep(j2)
+    rep_1 = generate_SU2_irrep(j1)
+    rep_2 = generate_SU2_irrep(j2)
 
-    rep_final = SU_irrep.generate_SU2_irrep(J)
+    rep_final = generate_SU2_irrep(J)
     
     print(f"Creating CGCs for j1 = {rep_1.get_SU2_j()}, j2 = {rep_2.get_SU2_j()}, J = {rep_final.get_SU2_j()}")
 
