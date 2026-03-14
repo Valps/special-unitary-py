@@ -1476,10 +1476,10 @@ def test_SU2_CGCs(j1, j2, J):
                     m1 = state_1.get_SU2_m()
                     m2 = state_2.get_SU2_m()
                     M = state_final.get_SU2_m()
-                    #print(f"m1 = {m1}, m2 = {m2}, M = {M}, CGC = {my_CGC}, 7*CGC**2 = {7*my_CGC**2}")
+
                     sympy_cgc = clebsch_gordan(j1, j2, J, m1, m2, M).evalf()
 
-                    if abs(abs(sympy_cgc) - abs(my_CGC)) > FLOAT_ZERO_PRECISION:  # test values up to signals
+                    if abs(sympy_cgc - my_CGC) > FLOAT_ZERO_PRECISION:   # test includes sign convention
                         print(f"m1 = {m1}, m2 = {m2}, M = {M}, OG: {abs(sympy_cgc):.6f}, My: {abs(my_CGC):.6f}")
                         errors += 1
                     else:
@@ -1530,10 +1530,15 @@ def test_error_assert_exceptions():
 def test_CGCs():
     #test_error_assert_exceptions()
     #test_SU2_specific_CGC()
-    test_SU2_CGCs(2, 3/2, 7/2)
-    test_SU2_CGCs(4/2, 3/2, 5/2)
-    test_SU2_CGCs(6/2, 5/2, 9/2)
-    test_SU2_CGCs(1, 1/2, 1/2)
+    #test_SU2_CGCs(2, 3/2, 7/2)
+    #test_SU2_CGCs(4/2, 3/2, 5/2)
+    #test_SU2_CGCs(6/2, 5/2, 9/2)
+    #test_SU2_CGCs(1, 1/2, 1/2)
+    test_SU2_CGCs(5, 3, 8)
+    test_SU2_CGCs(5, 3, 7)
+    test_SU2_CGCs(5, 3, 6)
+    test_SU2_CGCs(5, 3, 5)
+    test_SU2_CGCs(5, 3, 4)
 
 
 def test_highest_state():
