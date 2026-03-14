@@ -8,11 +8,8 @@ Author: Valmir Peixôto
 import numpy as np
 import pickle as pk
 from math import sqrt, comb
-#from collections import defaultdict
 from pathlib import Path
 import copy
-
-from sympy.physics.wigner import clebsch_gordan # TODO: remove this later
 
 flag_warning = False
 
@@ -878,7 +875,7 @@ class CGC_list():
                 for i in range(self.dim_1):
                     for j in range(self.dim_2):
                         if prod_states_mapping[i,j] >= 0:
-                            cgc = lstsq_sol[ multi_mapping[rep_final_qm], prod_states_mapping[i,j] ]    # OBS: Maybe need to swap matrix indices
+                            cgc = lstsq_sol[ multi_mapping[rep_final_qm], prod_states_mapping[i,j] ]
                             if abs(cgc) > FLOAT_ZERO_PRECISION:
                                 self.set_cgc(i,j, alpha, rep_final_qm, cgc)
 
