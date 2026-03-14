@@ -8,9 +8,11 @@ Author: Valmir Peixôto
 import numpy as np
 import pickle as pk
 from math import sqrt, comb
-from collections import defaultdict
+#from collections import defaultdict
 from pathlib import Path
 import copy
+
+from sympy.physics.wigner import clebsch_gordan # TODO: remove this later
 
 flag_warning = False
 
@@ -1457,6 +1459,9 @@ def test_SU2_CGCs(j1, j2, J):
     basis_2 = rep_2.get_basis()
     basis_final = rep_final.get_basis()
 
+    errors = 0
+    matches = 0
+
     for state_1 in basis_1:
         qm_1 = state_1.get_qm()
 
@@ -1468,7 +1473,20 @@ def test_SU2_CGCs(j1, j2, J):
 
                 my_CGC = my_CGC_list.get_CGC(qm_1, qm_2, 0, qm_final)
                 if my_CGC != 0:
-                    print(f"m1 = {state_1.get_SU2_m()}, m2 = {state_2.get_SU2_m()}, M = {state_final.get_SU2_m()}, CGC = {my_CGC}, 7*CGC**2 = {7*my_CGC**2}")
+                    m1 = state_1.get_SU2_m()
+                    m2 = state_2.get_SU2_m()
+                    M = state_final.get_SU2_m()
+                    #print(f"m1 = {m1}, m2 = {m2}, M = {M}, CGC = {my_CGC}, 7*CGC**2 = {7*my_CGC**2}")
+                    sympy_cgc = clebsch_gordan(j1, j2, J, m1, m2, M).evalf()
+                    if abs(abs(sympy_cgc) - abs(my_CGC)) > FLOAT_ZERO_PRECISION:
+                        print(f"OG: {abs(sympy_cgc)}, My: {abs(my_CGC)}")
+                        errors += 1
+                    else:
+                        matches += 1
+    
+    print(f"\nMatches: {matches}")
+    print(f"Errors: {errors}")
+
 
 
 
@@ -1512,7 +1530,7 @@ def test_CGCs():
     #test_error_assert_exceptions()
     #test_SU2_specific_CGC()
     #test_SU2_CGCs(2, 3/2, 7/2)
-    test_SU2_CGCs(2, 3/2, 5/2)
+    test_SU2_CGCs(2, 3/2, 7/2)
     #test_SU2_CGCs(1/2, 1/2, 0)
 
 
