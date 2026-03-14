@@ -758,7 +758,7 @@ class CGC_list():
                 for j in range(dim_2):
                     if coeff_mapping[i,j] >= 0:
                         # get the last rows of V^T (or the last columns of V), which are LI orthonormalized solutions
-                        coefficient = vt_matrix[ num_cgcs - self.multiplicity, coeff_mapping[i,j] ]
+                        coefficient = vt_matrix[ num_cgcs - mult_idx - 1, coeff_mapping[i,j] ]
 
                         # verify if it's not zero
                         if abs(coefficient) > FLOAT_ZERO_PRECISION:
