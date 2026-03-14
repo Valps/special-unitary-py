@@ -40,7 +40,7 @@ class SU_irrep():
     def get_basis(self, crescent_order = True) -> list['SU_state']:
         """Compute the basis for this representation.
         
-        It is computed only once. Subsequent calls returns the previous result."""
+        It is computed only once. Subsequent calls return the previous result."""
         if self.basis is not None:
             return self.basis
         
@@ -51,7 +51,7 @@ class SU_irrep():
     def get_dimension(self) -> int:
         """Calculate the dimension for this SU(N) irreducible representation.
         
-        It is computed only once. Subsequent calls returns the previous result."""
+        It is computed only once. Subsequent calls return the previous result."""
         if self.dim is not None:
             return self.dim
         
@@ -68,7 +68,7 @@ class SU_irrep():
     def get_quadratic_casimir(self) -> float:
         """Compute the SU(N) quadratic Casimir for this representation.
         
-        It is computed only once. Subsequent calls returns the previous result."""
+        It is computed only once. Subsequent calls return the previous result."""
 
         if self.casimir2 is not None:
             return self.casimir2
@@ -209,7 +209,7 @@ class SU_state():
     def get_sigma(self) -> list[int]:
         """Get row sum "sigma" array. 
         
-        It is computed only once. Subsequent calls returns the previous result."""
+        It is computed only once. Subsequent calls return the previous result."""
 
         if self.sigma is not None:
             return self.sigma
@@ -227,7 +227,7 @@ class SU_state():
     def get_z_weight(self) -> list[float]:
         """Compute the z-weight of the state.
         
-        It is computed only once. Subsequent calls returns the previous result."""
+        It is computed only once. Subsequent calls return the previous result."""
 
         if self.z_weight is not None:
             return self.z_weight
@@ -247,7 +247,7 @@ class SU_state():
     def get_p_weight(self) -> list[float]:
         """Compute the p-weight of the state.
         
-        It is computed only once. Subsequent calls returns the previous result."""
+        It is computed only once. Subsequent calls return the previous result."""
 
         if self.p_weight is not None:
             return self.p_weight
@@ -742,7 +742,7 @@ class CGC_list():
 
         #print(f"matrix to be solved: {matrix}")
         
-        u_matrix, singular_values_desc_order, vt_matrix = np.linalg.svd(matrix, compute_uv=True)
+        u_matrix, singular_values_desc_order, vt_matrix = np.linalg.svd(matrix, compute_uv=True, hermitian=False, full_matrices=True)
 
         num_zero_singular_values = 0
 
@@ -750,7 +750,7 @@ class CGC_list():
         for entry in singular_values_desc_order:
             if abs(entry) < FLOAT_ZERO_PRECISION:
                 num_zero_singular_values += 1
-        
+
         # the number of zero singular values must match the multiplicity, since it has 'multiplicity' linearly independent solutions
         if num_zero_singular_values != self.multiplicity:
             raise Exception(f"The number of zero singular values ({num_zero_singular_values}) does not match the given multiplicity ({self.multiplicity})")
@@ -761,7 +761,7 @@ class CGC_list():
                 for j in range(dim_2):
                     if coeff_mapping[i,j] >= 0:
                         # get the last rows of V^T (or the last columns of V), which are LI orthonormalized solutions
-                        coefficient = vt_matrix[ coeff_mapping[i,j], num_cgcs - self.multiplicity - 1 ]
+                        coefficient = vt_matrix[ num_cgcs - self.multiplicity, coeff_mapping[i,j] ]
 
                         # verify if it's not zero
                         if abs(coefficient) > FLOAT_ZERO_PRECISION:
@@ -1478,8 +1478,9 @@ def test_SU2_CGCs(j1, j2, J):
                     M = state_final.get_SU2_m()
                     #print(f"m1 = {m1}, m2 = {m2}, M = {M}, CGC = {my_CGC}, 7*CGC**2 = {7*my_CGC**2}")
                     sympy_cgc = clebsch_gordan(j1, j2, J, m1, m2, M).evalf()
-                    if abs(abs(sympy_cgc) - abs(my_CGC)) > FLOAT_ZERO_PRECISION:
-                        print(f"OG: {abs(sympy_cgc)}, My: {abs(my_CGC)}")
+
+                    if abs(abs(sympy_cgc) - abs(my_CGC)) > FLOAT_ZERO_PRECISION:  # test values up to signals
+                        print(f"m1 = {m1}, m2 = {m2}, M = {M}, OG: {abs(sympy_cgc):.6f}, My: {abs(my_CGC):.6f}")
                         errors += 1
                     else:
                         matches += 1
@@ -1529,9 +1530,10 @@ def test_error_assert_exceptions():
 def test_CGCs():
     #test_error_assert_exceptions()
     #test_SU2_specific_CGC()
-    #test_SU2_CGCs(2, 3/2, 7/2)
     test_SU2_CGCs(2, 3/2, 7/2)
-    #test_SU2_CGCs(1/2, 1/2, 0)
+    test_SU2_CGCs(4/2, 3/2, 5/2)
+    test_SU2_CGCs(6/2, 5/2, 9/2)
+    test_SU2_CGCs(1, 1/2, 1/2)
 
 
 def test_highest_state():
