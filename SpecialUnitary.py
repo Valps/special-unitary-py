@@ -766,7 +766,7 @@ class CGC_list():
         """Computes the list of Clebsch-Gordan Coefficients for the lower weight states on the 
         final representation, assuming that the highest weight state CGCs were computed before."""
 
-        state_weight = np.array( self.rep_final.get_basis()[qm_final].get_z_weight() )
+        state_weight = np.array( self.rep_final.get_basis()[qm_final].get_p_weight() )
 
         parent_mapping = np.full((self.dim_final), -1)
         multi_mapping = np.full((self.dim_final), -1)
@@ -779,18 +779,19 @@ class CGC_list():
 
         for final_rep_state in basis_final:
 
-            z_weight = np.array( final_rep_state.get_z_weight() )
+            p_weight = np.array( final_rep_state.get_p_weight() )
 
-            if np.isclose(z_weight, state_weight).all():    #z_weight == state_weight:
+            if np.isclose(p_weight, state_weight).all():    #z_weight == state_weight:
                 multi_mapping[final_rep_state.qm] = num_multi
                 num_multi += 1
             else:
-                for l in range(self.N - 2):  # l = 1, l < N   ; subtract 2, one for "<", one for its index nature starting from 0
+                #print(p_weight, state_weight)
+                for l in range(self.N - 1):  # l = 1, l < N
                     
-                    z_weight[l] -= 1
-                    z_weight[l+1] += 1
+                    p_weight[l] -= 1
+                    p_weight[l+1] += 1
 
-                    if np.isclose(z_weight, state_weight).all(): #z_weight == state_weight:
+                    if np.isclose(p_weight, state_weight).all(): #z_weight == state_weight:
                         parent_mapping[final_rep_state.qm] = num_parents
                         num_parents += 1
                         which_l_mapping[final_rep_state.qm] = l
@@ -799,8 +800,8 @@ class CGC_list():
                             self.compute_CGC_lower_states(final_rep_state.qm, alpha, done)
                         break
 
-                    z_weight[l] += 1
-                    z_weight[l+1] -= 1
+                    p_weight[l] += 1
+                    p_weight[l+1] -= 1
 
         # OBS: (M, N) vs (M, K)
 
@@ -870,7 +871,7 @@ class CGC_list():
                 for i in range(self.dim_1):
                     for j in range(self.dim_2):
                         if prod_states_mapping[i,j] >= 0:
-                            cgc = lstsq_sol[ prod_states_mapping[i,j] , multi_mapping[rep_final_qm] ]
+                            cgc = lstsq_sol[ multi_mapping[rep_final_qm], prod_states_mapping[i,j] ]
                             if abs(cgc) > FLOAT_ZERO_PRECISION:
                                 self.set_cgc(i,j, alpha, rep_final_qm, cgc)
 
