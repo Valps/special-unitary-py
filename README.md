@@ -1,9 +1,11 @@
 # special-unitary-py
-Very simple code in Python that creates and handles SU(N) irreducible representations. It computes tensorial product decomposition, Clebsch-Gordan Coefficients, dimensions, quadratic Casimir and basis states of SU(N).
+Very simple code in Python that creates and handles SU(N) irreducible representations. It computes tensorial product decomposition, Clebsch-Gordan Coefficients, dimensions, quadratic Casimir and basis states of SU(N) representations.
 
 It's based on the article `arXiv:1009.0437 [math-ph]`.
 
 ## Main Classes
+
+All relevant functions and classes are on `SpecialUnitary.py`. These are some classes defined on this file:
 
 - `SU_irrep`: Irreducible representation of SU(N). It's labeled by a `N` integer list (irrep weight, or i-weight, in short) in decreasing order, where the last element is always zero. The element `i` represent the number of boxes on row `i` of the representation respective Young diagram.
 - `SU_state`: Eigenstate/Eigenvector of `J_z` on SU(N). It's labeled by a Gelfand-Tsetlin pattern.
