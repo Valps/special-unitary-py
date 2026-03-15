@@ -127,9 +127,19 @@ def test_6j_squared_performance(young_max_boxes : int):
 
 
 
+def write_6j_squared(N, young_max_boxes):
+
+    storage = CGC_lists_storage(N)
+    storage.load_storage(ROOT_PATH / f"SU{N}_CGC_list.pk")
+
+    symbols_sto = symbols_6j_lists_storage(N, storage)
+    symbols_sto.generate_squared_6j_lists(young_max=young_max_boxes, verbose=True)
+    symbols_sto.write_storage(ROOT_PATH / f"SU{N}_squared_6j_symbols.pk")
+
 
 def main():
-    test_6j_squared_values(young_max_boxes=4)
+    write_6j_squared(N=3, young_max_boxes=2)
+    #test_6j_squared_values(young_max_boxes=4)
     #test_6j_squared_performance(young_max_boxes=2)
 
 

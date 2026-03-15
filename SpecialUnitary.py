@@ -1379,3 +1379,85 @@ def get_6j_squared_from_CGC_storage(rep_1 : SU_irrep, rep_2 : SU_irrep, rep_3 : 
     else:
         # If one of the CGCs lists is empty, so at least one of the tensors are null
         return 0
+
+
+class symbols_6j_lists_storage():
+    __slots__ = "N", "young_max", "rep_list", "coefficients", "storage"
+
+    def __init__(self, N : int, storage : CGC_lists_storage):
+        """Initializate a CGC list storage."""
+        self.N = N
+        self.young_max = None
+        self.coefficients = CGC_container()
+        self.rep_list = None
+        self.storage = storage
+
+    def generate_squared_6j_lists(self, young_max : int, verbose = False):
+        """Populate CGCs lists by computing all CGCs possible from representations with maximum 'young_max'
+        boxes to the right.
+        
+        Only combinations of representations with non-zero multiplicity will be computed and stored.
+        """
+        self.young_max = young_max
+        self.rep_list = create_representation_list(N=self.N, horizontal_max=self.young_max)
+
+        num_reps = len(self.rep_list)
+
+        num_iterations = num_reps ** 5
+        iterations = 0
+
+        for rep_1 in self.rep_list:
+            p1_idx = rep_1.get_p_index()
+            for rep_2 in self.rep_list:
+                p2_idx = rep_2.get_p_index()
+
+                for rep_3 in self.rep_list:
+                    p3_idx = rep_3.get_p_index()
+
+                    for rep_4 in self.rep_list:
+                        p4_idx = rep_4.get_p_index()
+
+                        for rep_5 in self.rep_list:
+                            p5_idx = rep_5.get_p_index()
+
+                            for rep_6 in self.rep_list:
+                                p6_idx = rep_6.get_p_index()
+
+                                value = get_6j_squared_from_CGC_storage(rep_1, rep_2, rep_3, rep_4, rep_5, rep_6, self.storage)
+                                if value != 0:
+                                    self.coefficients[p1_idx, p2_idx, p3_idx, p4_idx, p5_idx, p6_idx] = value
+
+                            iterations += 1
+                            if verbose: print(f"Progress: {(iterations/num_iterations):.1%}", end=" \r") 
+        
+        if verbose: print("Finished!")
+
+    def find(self, rep_1 : SU_irrep, rep_2 : SU_irrep, rep_3 : SU_irrep,
+                   rep_4 : SU_irrep, rep_5 : SU_irrep, rep_6 : SU_irrep) -> float:
+        """Returns the value corresponding to the given representations.
+        
+            It will return zero if not found."""
+        return self.coefficients[rep_1.get_p_index(), rep_2.get_p_index(), rep_3.get_p_index(),
+                                rep_4.get_p_index(), rep_5.get_p_index(), rep_6.get_p_index()]
+
+    
+    def write_storage(self, filepath : Path | str):
+        """Write all coefficients on 'filepath'."""
+        if type(filepath) != Path:
+            output_path = Path(filepath)
+        else:
+            output_path = filepath
+
+        with open(output_path, 'wb') as file:
+            pk.dump(self.coefficients, file)
+
+
+    def load_storage(self, filepath : Path | str):
+        """Load all coefficients from 'filepath'."""
+        if type(filepath) != Path:
+            input_path = Path(filepath)
+        else:
+            input_path = filepath
+
+        with open(input_path, 'rb') as file:
+            self.coefficients = pk.load(file)
