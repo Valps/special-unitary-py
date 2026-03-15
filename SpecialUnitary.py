@@ -873,18 +873,20 @@ class CGC_list():
 class CGC_lists_storage():
     __slots__ = "N", "young_max", "rep_list", "coeff_lists"
 
-    def __init__(self, N : int, young_max : int):
+    def __init__(self, N : int):
+        """Initializate a CGC list storage."""
         self.N = N
-        self.young_max = young_max
+        self.young_max = None
         self.coeff_lists = CGC_list_container()
         self.rep_list = None
 
-    def generate_cgc_lists(self, verbose = False):
+    def generate_cgc_lists(self, young_max : int, verbose = False):
         """Populate CGCs lists by computing all CGCs possible from representations with maximum 'young_max'
         boxes to the right.
         
         Only combinations of representations with non-zero multiplicity will be computed and stored.
         """
+        self.young_max = young_max
         self.rep_list = create_representation_list(N=self.N, horizontal_max=self.young_max)
 
         num_reps = len(self.rep_list)
@@ -903,8 +905,22 @@ class CGC_lists_storage():
         
         if verbose: print("Finished!")
 
-    def find(self, rep_1 : SU_irrep, rep_2 : SU_irrep, rep_3 : SU_irrep):
+    def find(self, rep_1 : SU_irrep, rep_2 : SU_irrep, rep_3 : SU_irrep) -> CGC_list | None:
+        """Returns the CGC list corresponding to the given representations.
+        
+        It returns None if the combination wasn't found or if they have zero multiplicity."""
         return self.coeff_lists[rep_1.get_p_index(), rep_2.get_p_index(), rep_3.get_p_index()]
+    
+
+    def get_list(self, rep_1 : SU_irrep, rep_2 : SU_irrep, rep_3 : SU_irrep) -> CGC_list:
+        """Returns the CGC list corresponding to the given representations.
+        
+        It will return a new CGC_list if the combination wasn't found."""
+        found = self.find(rep_1, rep_2, rep_3)
+        if found is None:
+            return CGC_list(rep_1, rep_2, rep_3)
+        return found
+
     
     def write_storage(self, filepath : Path | str):
         """Write all CGC lists on 'filepath'."""
@@ -926,8 +942,6 @@ class CGC_lists_storage():
 
         with open(input_path, 'rb') as file:
             self.coeff_lists = pk.load(file)
-
-        self.rep_list = create_representation_list(N=self.N, horizontal_max=self.young_max)
 
 
 def sum_decompositions_list(decomp_list : list[tuple[SU_irrep, int]]):
@@ -1292,6 +1306,9 @@ def fill_tensor_integral_from_CGC_list(cgc_list : CGC_list):
                        dim_2, dim_2,
                        dim_3, dim_3))
     
+    if cgc_list.multiplicity == 0:
+        return tensor
+    
     for m1 in cgc_list.rep_1.get_basis():
         m1_qm = m1.get_qm()
         for m1p in cgc_list.rep_1.get_basis():
@@ -1330,3 +1347,35 @@ def get_6j_squared_from_CGCs(rep_1 : SU_irrep, rep_2 : SU_irrep, rep_3 : SU_irre
             ten_alpha_gamma1_beta1, ten_beta2_gamma1_sigma, ten_alpha_gamma2_beta2, ten_beta1_gamma2_sigma,
             optimize='auto'
         )
+
+def get_6j_squared_from_CGC_storage(rep_1 : SU_irrep, rep_2 : SU_irrep, rep_3 : SU_irrep, rep_4 : SU_irrep, rep_5 : SU_irrep, rep_6 : SU_irrep, storage : CGC_lists_storage):
+    """Compute 6j symbols squared for given SU(N) representations and a CGC storage."""
+
+    cgc_list_1 = storage.find(rep_2, rep_1, rep_3)
+    cgc_list_2 = storage.find(rep_6, rep_1, rep_5)
+    cgc_list_3 = storage.find(rep_2, rep_4, rep_6)
+    cgc_list_4 = storage.find(rep_3, rep_4, rep_5)
+
+    if cgc_list_1 and cgc_list_2 and cgc_list_3 and cgc_list_4:
+
+        ten_alpha_gamma1_beta1 = fill_tensor_integral_from_CGC_list(cgc_list_1)
+        ten_beta2_gamma1_sigma = fill_tensor_integral_from_CGC_list(cgc_list_2)
+        ten_alpha_gamma2_beta2 = fill_tensor_integral_from_CGC_list(cgc_list_3)
+        ten_beta1_gamma2_sigma = fill_tensor_integral_from_CGC_list(cgc_list_4)
+
+        if disable_opt_einsum:
+            return np.einsum( 
+                "abjicd, feijhg, balkef, dcklgh ->",
+                ten_alpha_gamma1_beta1, ten_beta2_gamma1_sigma, ten_alpha_gamma2_beta2, ten_beta1_gamma2_sigma,
+                optimize='auto'
+            )
+        else:
+            return oe.contract( 
+                "abjicd, feijhg, balkef, dcklgh ->",
+                ten_alpha_gamma1_beta1, ten_beta2_gamma1_sigma, ten_alpha_gamma2_beta2, ten_beta1_gamma2_sigma,
+                optimize='auto'
+            )
+    
+    else:
+        # If one of the CGCs lists is empty, so at least one of the tensors are null
+        return 0
