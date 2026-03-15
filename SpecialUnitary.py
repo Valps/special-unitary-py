@@ -513,10 +513,14 @@ def get_fusion_number(rep_1 : SU_irrep,
         return 0
 
 class CGC_container(dict):
-    """Just a dict that do not create keys for non-existing keys and returns 0.0 instead."""
+    """Just a dict that does not create keys for non-existing keys and returns 0.0 instead."""
     def __missing__(self, key):
         return 0.0
 
+class CGC_list_container(dict):
+    """Just a dict that does not create keys for non-existing keys and returns None instead."""
+    def __missing__(self, key):
+        return None
 
 class CGC_list():
     __slots__ = "rep_1", "rep_2", "rep_final", "N", "multiplicity", "dim_1", "dim_2", "dim_final", "coefficients"
@@ -866,6 +870,64 @@ class CGC_list():
         with open(input_path, 'rb') as file:
             self.coefficients = pk.load(file)
 
+class CGC_lists_storage():
+    __slots__ = "N", "young_max", "rep_list", "coeff_lists"
+
+    def __init__(self, N : int, young_max : int):
+        self.N = N
+        self.young_max = young_max
+        self.coeff_lists = CGC_list_container()
+        self.rep_list = None
+
+    def generate_cgc_lists(self, verbose = False):
+        """Populate CGCs lists by computing all CGCs possible from representations with maximum 'young_max'
+        boxes to the right.
+        
+        Only combinations of representations with non-zero multiplicity will be computed and stored.
+        """
+        self.rep_list = create_representation_list(N=self.N, horizontal_max=self.young_max)
+
+        num_reps = len(self.rep_list)
+
+        num_iterations = num_reps ** 2
+        iterations = 0
+
+        for rep_1 in self.rep_list:
+            p1_idx = rep_1.get_p_index()
+            for rep_2 in self.rep_list:
+                p2_idx = rep_2.get_p_index()
+                for rep_final, mult in SU_decomposition(rep_1, rep_2, rep_aux_list=self.rep_list).decomposition:
+                    self.coeff_lists[p1_idx, p2_idx, rep_final.get_p_index()] = CGC_list(rep_1, rep_2, rep_final, mult)
+                iterations += 1
+                if verbose: print(f"Progress: {(iterations/num_iterations):.1%}", end=" \r") 
+        
+        if verbose: print("Finished!")
+
+    def find(self, rep_1 : SU_irrep, rep_2 : SU_irrep, rep_3 : SU_irrep):
+        return self.coeff_lists[rep_1.get_p_index(), rep_2.get_p_index(), rep_3.get_p_index()]
+    
+    def write_storage(self, filepath : Path | str):
+        """Write all CGC lists on 'filepath'."""
+        if type(filepath) != Path:
+            output_path = Path(filepath)
+        else:
+            output_path = filepath
+
+        with open(output_path, 'wb') as file:
+            pk.dump(self.coeff_lists, file)
+
+
+    def load_storage(self, filepath : Path | str):
+        """Load CGC lists from 'filepath'."""
+        if type(filepath) != Path:
+            input_path = Path(filepath)
+        else:
+            input_path = filepath
+
+        with open(input_path, 'rb') as file:
+            self.coeff_lists = pk.load(file)
+
+        self.rep_list = create_representation_list(N=self.N, horizontal_max=self.young_max)
 
 
 def sum_decompositions_list(decomp_list : list[tuple[SU_irrep, int]]):
