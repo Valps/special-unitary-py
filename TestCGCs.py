@@ -405,31 +405,6 @@ def orthog_type_2(j1, j2, J):
     return (True if not errors else False)
 
 
-    errors = 0
-    
-    for M in cgc_list.rep_1.get_basis():                    # M
-        for Mp in cgc_list.rep_2.get_basis():               # M'
-            for M_t in cgc_list.rep_1.get_basis():          # M~
-                for Mp_t in cgc_list.rep_2.get_basis():     # M'~
-                    
-                    # expected result from deltas
-                    expected_result = 1 if (M == M_t and Mp == Mp_t) else 0
-                    
-                    # now test combination
-                    sum_var = 0
-                    for Mpp in cgc_list.rep_final.get_basis():      # M''
-                        for alpha in range(cgc_list.multiplicity):    # alpha
-
-                            sum_var += (cgc_list.get_CGC(M.get_qm(), Mp.get_qm(), alpha, Mpp.get_qm()) 
-                                        *  (cgc_list.get_CGC(M_t.get_qm(), Mp_t.get_qm(), alpha, Mpp.get_qm())).conjugate()  )
-
-                    if abs(sum_var - expected_result) > FLOAT_ZERO_PRECISION:
-                        print(f"{sum_var:.6f} vs {expected_result}")
-                        return False #errors += 1
-    
-    return (True if not errors else False)
-
-
 
 
 
