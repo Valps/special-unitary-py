@@ -1,7 +1,10 @@
 from SpecialUnitary import *
 from sympy.physics.wigner import wigner_6j
+from Write_CGCs_Storage import SU2_STORAGE_PATH
 import numpy as np
 import time
+
+ROOT_PATH = Path(__file__).parent
 
 FLOAT_CUTOFF = 10**(-10)
 
@@ -31,13 +34,16 @@ def test_6j_squared_values(young_max_boxes : int):
     num_iterations = list_size**6
     progress = 0
 
+    storage = CGC_lists_storage(N=2)
+    storage.load_storage(SU2_STORAGE_PATH)
+
     for rep_1 in rep_list:
         for rep_2 in rep_list:
             for rep_3 in rep_list:
                 for rep_4 in rep_list:
                     for rep_5 in rep_list:
                         for rep_6 in rep_list:
-                            tensor_valued = get_6j_squared_from_CGCs(rep_1, rep_2, rep_3, rep_4, rep_5, rep_6)
+                            tensor_valued = get_6j_squared_from_CGC_storage(rep_1, rep_2, rep_3, rep_4, rep_5, rep_6, storage)
                             sympy_valued = get_6j_squared_sympy(rep_1, rep_2, rep_3, rep_4, rep_5, rep_6)
                             
                             #if tensor_valued != 0 and sympy_valued != 0:
@@ -100,13 +106,17 @@ def test_6j_squared_performance(young_max_boxes : int):
 
     init_time = time.time()
 
+    storage = CGC_lists_storage(N=2)
+    storage.load_storage(SU2_STORAGE_PATH)
+
     for rep_1 in rep_list:
         for rep_2 in rep_list:
             for rep_3 in rep_list:
                 for rep_4 in rep_list:
                     for rep_5 in rep_list:
                         for rep_6 in rep_list:
-                            tensor_valued = get_6j_squared_from_CGCs(rep_1, rep_2, rep_3, rep_4, rep_5, rep_6)
+                            tensor_valued = get_6j_squared_from_CGC_storage(rep_1, rep_2, rep_3, rep_4, rep_5, rep_6, storage)
+                            #tensor_valued = get_6j_squared_from_CGCs(rep_1, rep_2, rep_3, rep_4, rep_5, rep_6)
                             progress += 1
                         
                         print(f"{(progress / num_iterations):.1%}", end=' \r')
@@ -117,10 +127,20 @@ def test_6j_squared_performance(young_max_boxes : int):
 
 
 
+def write_6j_squared(N, young_max_boxes):
+
+    storage = CGC_lists_storage(N)
+    storage.load_storage(ROOT_PATH / f"SU{N}_CGC_list.pk")
+
+    symbols_sto = symbols_6j_lists_storage(N, storage)
+    symbols_sto.generate_squared_6j_lists(young_max=young_max_boxes, verbose=True)
+    symbols_sto.write_storage(ROOT_PATH / f"SU{N}_squared_6j_symbols.pk")
+
 
 def main():
-    test_6j_squared_values(young_max_boxes=4)
-    #test_6j_squared_performance(young_max_boxes=4)
+    write_6j_squared(N=3, young_max_boxes=2)
+    #test_6j_squared_values(young_max_boxes=4)
+    #test_6j_squared_performance(young_max_boxes=2)
 
 
 

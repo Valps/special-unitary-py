@@ -513,10 +513,14 @@ def get_fusion_number(rep_1 : SU_irrep,
         return 0
 
 class CGC_container(dict):
-    """Just a dict that do not create keys for non-existing keys and returns 0.0 instead."""
+    """Just a dict that does not create keys for non-existing keys and returns 0.0 instead."""
     def __missing__(self, key):
         return 0.0
 
+class CGC_list_container(dict):
+    """Just a dict that does not create keys for non-existing keys and returns None instead."""
+    def __missing__(self, key):
+        return None
 
 class CGC_list():
     __slots__ = "rep_1", "rep_2", "rep_final", "N", "multiplicity", "dim_1", "dim_2", "dim_final", "coefficients"
@@ -866,6 +870,78 @@ class CGC_list():
         with open(input_path, 'rb') as file:
             self.coefficients = pk.load(file)
 
+class CGC_lists_storage():
+    __slots__ = "N", "young_max", "rep_list", "coeff_lists"
+
+    def __init__(self, N : int):
+        """Initializate a CGC list storage."""
+        self.N = N
+        self.young_max = None
+        self.coeff_lists = CGC_list_container()
+        self.rep_list = None
+
+    def generate_cgc_lists(self, young_max : int, verbose = False):
+        """Populate CGCs lists by computing all CGCs possible from representations with maximum 'young_max'
+        boxes to the right.
+        
+        Only combinations of representations with non-zero multiplicity will be computed and stored.
+        """
+        self.young_max = young_max
+        self.rep_list = create_representation_list(N=self.N, horizontal_max=self.young_max)
+
+        num_reps = len(self.rep_list)
+
+        num_iterations = num_reps ** 2
+        iterations = 0
+
+        for rep_1 in self.rep_list:
+            p1_idx = rep_1.get_p_index()
+            for rep_2 in self.rep_list:
+                p2_idx = rep_2.get_p_index()
+                for rep_final, mult in SU_decomposition(rep_1, rep_2, rep_aux_list=self.rep_list).decomposition:
+                    self.coeff_lists[p1_idx, p2_idx, rep_final.get_p_index()] = CGC_list(rep_1, rep_2, rep_final, mult)
+                iterations += 1
+                if verbose: print(f"Progress: {(iterations/num_iterations):.1%}", end=" \r") 
+        
+        if verbose: print("Finished!")
+
+    def find(self, rep_1 : SU_irrep, rep_2 : SU_irrep, rep_3 : SU_irrep) -> CGC_list | None:
+        """Returns the CGC list corresponding to the given representations.
+        
+        It returns None if the combination wasn't found or if they have zero multiplicity."""
+        return self.coeff_lists[rep_1.get_p_index(), rep_2.get_p_index(), rep_3.get_p_index()]
+    
+
+    def get_list(self, rep_1 : SU_irrep, rep_2 : SU_irrep, rep_3 : SU_irrep) -> CGC_list:
+        """Returns the CGC list corresponding to the given representations.
+        
+        It will return a new CGC_list if the combination wasn't found."""
+        found = self.find(rep_1, rep_2, rep_3)
+        if found is None:
+            return CGC_list(rep_1, rep_2, rep_3)
+        return found
+
+    
+    def write_storage(self, filepath : Path | str):
+        """Write all CGC lists on 'filepath'."""
+        if type(filepath) != Path:
+            output_path = Path(filepath)
+        else:
+            output_path = filepath
+
+        with open(output_path, 'wb') as file:
+            pk.dump(self.coeff_lists, file)
+
+
+    def load_storage(self, filepath : Path | str):
+        """Load CGC lists from 'filepath'."""
+        if type(filepath) != Path:
+            input_path = Path(filepath)
+        else:
+            input_path = filepath
+
+        with open(input_path, 'rb') as file:
+            self.coeff_lists = pk.load(file)
 
 
 def sum_decompositions_list(decomp_list : list[tuple[SU_irrep, int]]):
@@ -1230,6 +1306,9 @@ def fill_tensor_integral_from_CGC_list(cgc_list : CGC_list):
                        dim_2, dim_2,
                        dim_3, dim_3))
     
+    if cgc_list.multiplicity == 0:
+        return tensor
+    
     for m1 in cgc_list.rep_1.get_basis():
         m1_qm = m1.get_qm()
         for m1p in cgc_list.rep_1.get_basis():
@@ -1268,3 +1347,117 @@ def get_6j_squared_from_CGCs(rep_1 : SU_irrep, rep_2 : SU_irrep, rep_3 : SU_irre
             ten_alpha_gamma1_beta1, ten_beta2_gamma1_sigma, ten_alpha_gamma2_beta2, ten_beta1_gamma2_sigma,
             optimize='auto'
         )
+
+def get_6j_squared_from_CGC_storage(rep_1 : SU_irrep, rep_2 : SU_irrep, rep_3 : SU_irrep, rep_4 : SU_irrep, rep_5 : SU_irrep, rep_6 : SU_irrep, storage : CGC_lists_storage):
+    """Compute 6j symbols squared for given SU(N) representations and a CGC storage."""
+
+    cgc_list_1 = storage.find(rep_2, rep_1, rep_3)
+    cgc_list_2 = storage.find(rep_6, rep_1, rep_5)
+    cgc_list_3 = storage.find(rep_2, rep_4, rep_6)
+    cgc_list_4 = storage.find(rep_3, rep_4, rep_5)
+
+    if cgc_list_1 and cgc_list_2 and cgc_list_3 and cgc_list_4:
+
+        ten_alpha_gamma1_beta1 = fill_tensor_integral_from_CGC_list(cgc_list_1)
+        ten_beta2_gamma1_sigma = fill_tensor_integral_from_CGC_list(cgc_list_2)
+        ten_alpha_gamma2_beta2 = fill_tensor_integral_from_CGC_list(cgc_list_3)
+        ten_beta1_gamma2_sigma = fill_tensor_integral_from_CGC_list(cgc_list_4)
+
+        if disable_opt_einsum:
+            return np.einsum( 
+                "abjicd, feijhg, balkef, dcklgh ->",
+                ten_alpha_gamma1_beta1, ten_beta2_gamma1_sigma, ten_alpha_gamma2_beta2, ten_beta1_gamma2_sigma,
+                optimize='auto'
+            )
+        else:
+            return oe.contract( 
+                "abjicd, feijhg, balkef, dcklgh ->",
+                ten_alpha_gamma1_beta1, ten_beta2_gamma1_sigma, ten_alpha_gamma2_beta2, ten_beta1_gamma2_sigma,
+                optimize='auto'
+            )
+    
+    else:
+        # If one of the CGCs lists is empty, so at least one of the tensors are null
+        return 0
+
+
+class symbols_6j_lists_storage():
+    __slots__ = "N", "young_max", "rep_list", "coefficients", "storage"
+
+    def __init__(self, N : int, storage : CGC_lists_storage):
+        """Initializate a CGC list storage."""
+        self.N = N
+        self.young_max = None
+        self.coefficients = CGC_container()
+        self.rep_list = None
+        self.storage = storage
+
+    def generate_squared_6j_lists(self, young_max : int, verbose = False):
+        """Populate CGCs lists by computing all CGCs possible from representations with maximum 'young_max'
+        boxes to the right.
+        
+        Only combinations of representations with non-zero multiplicity will be computed and stored.
+        """
+        self.young_max = young_max
+        self.rep_list = create_representation_list(N=self.N, horizontal_max=self.young_max)
+
+        num_reps = len(self.rep_list)
+
+        num_iterations = num_reps ** 5
+        iterations = 0
+
+        for rep_1 in self.rep_list:
+            p1_idx = rep_1.get_p_index()
+            for rep_2 in self.rep_list:
+                p2_idx = rep_2.get_p_index()
+
+                for rep_3 in self.rep_list:
+                    p3_idx = rep_3.get_p_index()
+
+                    for rep_4 in self.rep_list:
+                        p4_idx = rep_4.get_p_index()
+
+                        for rep_5 in self.rep_list:
+                            p5_idx = rep_5.get_p_index()
+
+                            for rep_6 in self.rep_list:
+                                p6_idx = rep_6.get_p_index()
+
+                                value = get_6j_squared_from_CGC_storage(rep_1, rep_2, rep_3, rep_4, rep_5, rep_6, self.storage)
+                                if value != 0:
+                                    self.coefficients[p1_idx, p2_idx, p3_idx, p4_idx, p5_idx, p6_idx] = value
+
+                            iterations += 1
+                            if verbose: print(f"Progress: {(iterations/num_iterations):.1%}", end=" \r") 
+        
+        if verbose: print("Finished!")
+
+    def find(self, rep_1 : SU_irrep, rep_2 : SU_irrep, rep_3 : SU_irrep,
+                   rep_4 : SU_irrep, rep_5 : SU_irrep, rep_6 : SU_irrep) -> float:
+        """Returns the value corresponding to the given representations.
+        
+            It will return zero if not found."""
+        return self.coefficients[rep_1.get_p_index(), rep_2.get_p_index(), rep_3.get_p_index(),
+                                rep_4.get_p_index(), rep_5.get_p_index(), rep_6.get_p_index()]
+
+    
+    def write_storage(self, filepath : Path | str):
+        """Write all coefficients on 'filepath'."""
+        if type(filepath) != Path:
+            output_path = Path(filepath)
+        else:
+            output_path = filepath
+
+        with open(output_path, 'wb') as file:
+            pk.dump(self.coefficients, file)
+
+
+    def load_storage(self, filepath : Path | str):
+        """Load all coefficients from 'filepath'."""
+        if type(filepath) != Path:
+            input_path = Path(filepath)
+        else:
+            input_path = filepath
+
+        with open(input_path, 'rb') as file:
+            self.coefficients = pk.load(file)
