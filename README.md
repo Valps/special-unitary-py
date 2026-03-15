@@ -8,7 +8,7 @@ It's based on the article `arXiv:1009.0437 [math-ph]`.
 - `SU_irrep`: Irreducible representation of SU(N). It's labeled by a `N` integer list (irrep weight, or i-weight, in short) in decreasing order, where the last element is always zero. The element `i` represent the number of boxes on row `i` of the representation respective Young diagram.
 - `SU_state`: Eigenstate/Eigenvector of `J_z` on SU(N). It's labeled by a Gelfand-Tsetlin pattern.
 - `SU_decomposition`: Decomposes the tensorial product of two `SU_irrep` into a sum of representations, each with its own multiplicity.
-- `CGC_list`: Generates and stores all Clebsch-Gordan Coefficients (CGCs) arising from the decomposition of the first two `SU_irrep`s into the third `SU_irrep`.
+- `CGC_list`: Generates and stores all Clebsch-Gordan Coefficients (CGCs) arising from the decomposition of the first two `SU_irrep`s into the third `SU_irrep`. It takes into account the multiplicity for SU(N) with N > 2.
 - `CGC_lists_storage`: Stores a list of `CGC_list` given `N` and the maximum/cutoff number of boxes on Young diagram to the right. You can write/load its data on disk as a pickle file.
 - `SU_multiple_decomposition`: Suitable for decomposing the product of more than two representations. It receives a list of representations whose product is to be decomposed.
 - `symbols_6j_lists_storage`: Stores the squared 6j-symbols for SU(N). You can write/load its data on disk as a pickle file
