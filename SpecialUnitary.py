@@ -1256,10 +1256,39 @@ def integral_3_matrices(cgc_list : CGC_list,
                         m : SU_state, 
                         mp : SU_state):
     """
-    Compute the integral of 3 matrices elements from representations in 'cgc_list'.
+    Compute the integral of 3 matrices elements from representations in 'cgc_list' for given states indices.
     """
     sum_var = 0
     for mult_idx in range(cgc_list.multiplicity):
         sum_var += (cgc_list.get_CGC(m_1.get_qm(), m_2.get_qm(), mult_idx, mp.get_qm())
                     * (cgc_list.get_CGC(mp_1.get_qm(), mp_2.get_qm(), mult_idx, m.get_qm())).conjugate() )
     return sum_var / (cgc_list.rep_final.get_dimension())
+
+
+def fill_tensor_integral_from_CGC_list(cgc_list : CGC_list):
+    """
+    Compute the tensor arising from 3 matrices elements integral from representations in 'cgc_list'.
+    """
+    dim_1 = cgc_list.rep_1.get_dimension()
+    dim_2 = cgc_list.rep_2.get_dimension()
+    dim_3 = cgc_list.rep_final.get_dimension()
+    tensor = np.zeros((dim_1, dim_1, 
+                       dim_2, dim_2,
+                       dim_3, dim_3))
+    
+    for m1 in cgc_list.rep_1.get_basis():
+        m1_qm = m1.get_qm()
+        for m1p in cgc_list.rep_1.get_basis():
+            m1p_qm = m1p.get_qm()
+            for m2 in cgc_list.rep_2.get_basis():
+                m2_qm = m2.get_qm()
+                for m2p in cgc_list.rep_2.get_basis():
+                    m2p_qm = m2p.get_qm()
+                    for m in cgc_list.rep_final.get_basis():
+                        m_qm = m.get_qm()
+                        for mp in cgc_list.rep_final.get_basis():
+                            mp_qm = mp.get_qm()
+
+                            tensor[m1_qm, m1p_qm, m2_qm, m2p_qm, m_qm, mp_qm] = integral_3_matrices(cgc_list, m1, m1p, m2, m2p, m, mp)
+    
+    return tensor
