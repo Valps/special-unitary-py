@@ -975,6 +975,12 @@ class SU_multiple_decomposition():
         # finished!
         self.decomposition = sorted(current_rep_list_to_decompose_new, reverse=decrescent_order)
 
+    def get_multiplicity(self, rep_final : SU_irrep):
+        for decomposed_rep, multiplicity in self.decomposition:
+            if rep_final == decomposed_rep:
+                return multiplicity
+        return 0
+
     def __str__(self):
         return "\n".join([ f"{rep.i_weight}, multiplicity = {mult}" for rep, mult in self.decomposition ])
 
@@ -1232,17 +1238,12 @@ def get_SU2_CGC(j_1, j_2, j_3, m_1, m_2, m_3) -> float:
 
     rep_final = generate_SU2_irrep(j_3)
 
-    #print(f"Initial reps: {rep_1}, {rep_2}; final rep: {rep_final}")
-    #print(f"j1 = {rep_1.get_SU2_j()}, j2 = {rep_2.get_SU2_j()}, J = {rep_final.get_SU2_j()}")
-
     my_CGC_list = CGC_list(rep_1, rep_2, rep_final)
 
     state_1 = generate_SU2_state(j_1, m_1)
     state_2 = generate_SU2_state(j_2, m_2)
 
     final_state = generate_SU2_state(j_3, m_3)
-
-    #print(f"m1 = {state_1.get_SU2_m()}, m2 = {state_2.get_SU2_m()}, M = {final_state.get_SU2_m()}\n")
 
     return my_CGC_list.get_CGC(state_1.get_qm(), state_2.get_qm(), 0, final_state.get_qm())
 
