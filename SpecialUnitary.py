@@ -17,7 +17,7 @@ try:
 except ImportError:
     disable_opt_einsum = True
 
-flag_warning = False
+#flag_warning = False
 
 Q_M_START_INDEX = 0     # it must be 1 as it is defined on the article, but for array purposes it's better to be 0
 FLOAT_ZERO_PRECISION = 10**(-10)    # precision to define if a float number is zero
@@ -274,7 +274,6 @@ class SU_state():
             # reverse order because highest l is on the top
             diagonal_list.append([None for _ in range(k)] + diagonal[::-1])    
 
-        #print(f"GT-Pattern = {self}, Diagonal pattern = {diagonal_list}")
         return diagonal_list
 
 
@@ -557,13 +556,6 @@ class CGC_list():
         if multiplicity > 0:
 
             self.compute_CGC_highest_state()
-
-            #global flag_warning
-
-            #if not flag_warning:
-            #    print("Warning: it isnt computing lower CGCs yet!")
-            #    flag_warning = True
-            #return
         
             # now compute lower states CGCs
 
@@ -574,7 +566,6 @@ class CGC_list():
 
                 for qm_final in reversed(range(self.dim_final)):
                     if not done[qm_final]:
-                        #print(f"Test : {qm_final}")    # TODO: remove this
                         self.compute_CGC_lower_states(qm_final, mult_idx, done)
 
     def set_cgc(self,
@@ -627,16 +618,6 @@ class CGC_list():
 
         HPrimePrime_z_weight = highest_state.get_z_weight()
 
-        #if self.N == 2:
-        #    high_m = highest_state.get_SU2_m()
-        #    print(f"Highest final rep state: M = {high_m}")    # TODO: SU(2) only
-        #else:
-        #    high_m = -1
-        
-        #print(f"Its p-weight: {HPrimePrime_p_weight}")
-
-        #print("####################\n")
-
         # Setting the number of CGCs to be computed, as well as populate coeff_mapping
 
         for state_left in basis_1:
@@ -651,37 +632,14 @@ class CGC_list():
                 # the sum of z_weight's of the states must matches with the final state z_weight
 
                 sum_z_weight = [ i + j for i, j in zip(M_z_weight, MPrime_z_weight) ]
-                
-
-
-                # TODO: remove this later
-                if False:
-                    if self.N == 2 and abs(high_m - (state_left.get_SU2_m() + state_right.get_SU2_m())) < FLOAT_ZERO_PRECISION:
-
-                        print(f"Verifying for m1={state_left.get_SU2_m()} and m2={state_right.get_SU2_m()}")  # TODO: SU(2) only
-                        print(f"Separate p-weights: {M_z_weight} and {MPrime_z_weight}")
-                        print(f"Sum vs Target: {sum_z_weight} vs {HPrimePrime_z_weight}\n")
-                    
-
-
-
-
 
                 if compare_weights(sum_z_weight, HPrimePrime_z_weight):
-
-                    #print(f"Match: {M_z_weight} + {MPrime_z_weight} = {HPrimePrime_z_weight}")
-
                     coeff_mapping[state_left.qm, state_right.qm] = curr_column
                     curr_column += 1
 
-        #print("####################\n")
-
         num_cgcs = curr_column
-        #print(f"Num of CGCs to be computed: {num_cgcs}")        # TODO: TO BE REMOVED
 
         assert num_cgcs != 0
-
-        # Ok
 
         # if it has 1 column (or 1 CGC), then the comparison is 1 to 1
         if num_cgcs == 1:
@@ -693,10 +651,6 @@ class CGC_list():
 
         # initializate matrix to be solved
         matrix = np.zeros((dim_1 * dim_2, num_cgcs))
-
-        #print(f"Dimension of rep 1: {dim_1}")
-        #print(f"Dimension of rep 2: {dim_2}")
-        #print(f"Matriz size: {matrix.shape}")
         
         for state_left in basis_1:
             i = state_left.qm
@@ -742,8 +696,6 @@ class CGC_list():
 
         # matrix is ready
         # solving rectangular matrix by singular value decomposition
-
-        #print(f"matrix to be solved: {matrix}")
         
         u_matrix, singular_values_desc_order, vt_matrix = np.linalg.svd(matrix, compute_uv=True, hermitian=False, full_matrices=True)
 
@@ -795,7 +747,6 @@ class CGC_list():
                 multi_mapping[final_rep_state.qm] = num_multi
                 num_multi += 1
             else:
-                #print(p_weight, state_weight)
                 for l in range(self.N - 1):  # l = 1, l < N
                     
                     p_weight[l] -= 1
@@ -812,8 +763,6 @@ class CGC_list():
 
                     p_weight[l] += 1
                     p_weight[l+1] -= 1
-
-        # OBS: (M, N) vs (M, K)
 
         final_rep_coeffs = np.zeros((num_parents, num_multi))   # coefficients 'b'
         prod_coeffs = np.zeros((num_parents, self.dim_1 * self.dim_2))
@@ -872,8 +821,7 @@ class CGC_list():
                                     prod_coeffs[ parent_mapping[final_rep_state.qm], prod_states_mapping[i,index] ] += cgc * state_right.compute_j_minus_component(k,l)
 
         # matrices ready   
-        #print(np.zeros((2,2)).shape)
-        #print(f"{final_rep_coeffs.shape} vs {prod_coeffs.shape}")
+
         lstsq_sol, residual, rank, singular_values = np.linalg.lstsq(final_rep_coeffs, prod_coeffs, rcond=None)  # rcond to silence warning
         
         for rep_final_qm in range(self.dim_final):
