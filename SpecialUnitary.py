@@ -11,6 +11,12 @@ from math import sqrt, comb
 from pathlib import Path
 import copy
 
+try:
+    import opt_einsum as oe
+    disable_opt_einsum = False
+except ImportError:
+    disable_opt_einsum = True
+
 flag_warning = False
 
 Q_M_START_INDEX = 0     # it must be 1 as it is defined on the article, but for array purposes it's better to be 0
@@ -1292,3 +1298,25 @@ def fill_tensor_integral_from_CGC_list(cgc_list : CGC_list):
                             tensor[m1_qm, m1p_qm, m2_qm, m2p_qm, m_qm, mp_qm] = integral_3_matrices(cgc_list, m1, m1p, m2, m2p, m, mp)
     
     return tensor
+
+
+def get_6j_squared_from_CGCs(rep_1 : SU_irrep, rep_2 : SU_irrep, rep_3 : SU_irrep, rep_4 : SU_irrep, rep_5 : SU_irrep, rep_6 : SU_irrep):
+    """Compute 6j symbols squared for given SU(N) representations."""
+
+    ten_alpha_gamma1_beta1 = fill_tensor_integral_from_CGC_list(CGC_list(rep_2, rep_1, rep_3))
+    ten_beta2_gamma1_sigma = fill_tensor_integral_from_CGC_list(CGC_list(rep_6, rep_1, rep_5))
+    ten_alpha_gamma2_beta2 = fill_tensor_integral_from_CGC_list(CGC_list(rep_2, rep_4, rep_6))
+    ten_beta1_gamma2_sigma = fill_tensor_integral_from_CGC_list(CGC_list(rep_3, rep_4, rep_5))
+
+    if disable_opt_einsum:
+        return np.einsum( 
+            "abjicd, feijhg, balkef, dcklgh ->",
+            ten_alpha_gamma1_beta1, ten_beta2_gamma1_sigma, ten_alpha_gamma2_beta2, ten_beta1_gamma2_sigma,
+            optimize='auto'
+        )
+    else:
+        return oe.contract( 
+            "abjicd, feijhg, balkef, dcklgh ->",
+            ten_alpha_gamma1_beta1, ten_beta2_gamma1_sigma, ten_alpha_gamma2_beta2, ten_beta1_gamma2_sigma,
+            optimize='auto'
+        )
