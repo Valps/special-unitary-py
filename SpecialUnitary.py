@@ -1245,3 +1245,20 @@ def get_SU2_CGC(j_1, j_2, j_3, m_1, m_2, m_3) -> float:
     #print(f"m1 = {state_1.get_SU2_m()}, m2 = {state_2.get_SU2_m()}, M = {final_state.get_SU2_m()}\n")
 
     return my_CGC_list.get_CGC(state_1.get_qm(), state_2.get_qm(), 0, final_state.get_qm())
+
+
+def integral_3_matrices(cgc_list : CGC_list, 
+                        m_1 : SU_state, 
+                        mp_1 : SU_state, 
+                        m_2 : SU_state, 
+                        mp_2 : SU_state, 
+                        m : SU_state, 
+                        mp : SU_state):
+    """
+    Compute the integral of 3 matrices elements from representations in 'cgc_list'.
+    """
+    sum_var = 0
+    for mult_idx in range(cgc_list.multiplicity):
+        sum_var += (cgc_list.get_CGC(m_1.get_qm(), m_2.get_qm(), mult_idx, mp.get_qm())
+                    * (cgc_list.get_CGC(mp_1.get_qm(), mp_2.get_qm(), mult_idx, m.get_qm())).conjugate() )
+    return sum_var / (cgc_list.rep_final.get_dimension())

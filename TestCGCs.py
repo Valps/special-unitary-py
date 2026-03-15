@@ -1,5 +1,6 @@
 from SpecialUnitary import * #SU_irrep, SU_state, SU_decomposition, CGC_list, generate_SU2_irrep
 from sympy.physics.wigner import clebsch_gordan
+import opt_einsum as oe
 import numpy as np
 
 ############### Test functions
@@ -312,7 +313,7 @@ def is_CGC_list_orthogonal_type_2(cgc_list : CGC_list) -> bool:
 def test_CGCs_orthogonality():
     print("Testing created CGCs orthogonality...")
 
-    N, hor_max = (3, 3) #(2,5) #(3, 2) #(2, 10)
+    N, hor_max = (4, 2) #(2,5) #(3, 2) #(2, 10)
 
     reps_list = create_representation_list(N=N, horizontal_max=hor_max)
 
@@ -465,10 +466,85 @@ def test_orthogonality_functions():
 
 
 
+def compute_tensor_for_reps(cgc_list : CGC_list):
+    dim_1 = cgc_list.rep_1.get_dimension()
+    dim_2 = cgc_list.rep_2.get_dimension()
+    dim_3 = cgc_list.rep_final.get_dimension()
+    tensor = np.zeros((dim_1, dim_1, 
+                       dim_2, dim_2,
+                       dim_3, dim_3))
+    
+    #for mult_idx in range(cgc_list.multiplicity):
+    for m1 in cgc_list.rep_1.get_basis():
+        m1_qm = m1.get_qm()
+        for m1p in cgc_list.rep_1.get_basis():
+            m1p_qm = m1p.get_qm()
+            for m2 in cgc_list.rep_2.get_basis():
+                m2_qm = m2.get_qm()
+                for m2p in cgc_list.rep_2.get_basis():
+                    m2p_qm = m2p.get_qm()
+                    for m in cgc_list.rep_final.get_basis():
+                        m_qm = m.get_qm()
+                        for mp in cgc_list.rep_final.get_basis():
+                            mp_qm = mp.get_qm()
+
+                            tensor[m1_qm, m1p_qm, m2_qm, m2p_qm, m_qm, mp_qm] = integral_3_matrices(cgc_list, m1, m1p, m2, m2p, m, mp)
+                            #tensor[m1, m1p, m2, m2p, m, mp] = cgc_list.get_CGC(m1.get_qm(), m2.get_qm(), mult_idx, mp.get_qm()) * (cgc_list.get_CGC(m1p.get_qm(), m2p.get_qm(), mult_idx, m.get_qm())).conjugate()
+    
+    return tensor
+
+
+
+
+
+def check_fusion_number_from_integral(rep_1 : SU_irrep, rep_2 : SU_irrep, rep_final : SU_irrep):
+    cgc_list = CGC_list(rep_1, rep_2, rep_final)
+
+    tensor = compute_tensor_for_reps(cgc_list)
+
+    value = oe.contract("aabbcc -> ", tensor, optimize='auto')
+
+    fusion_number = get_fusion_number(rep_1, rep_2, rep_final)
+
+    if abs(fusion_number - value) > FLOAT_ZERO_PRECISION:
+        return False
+    return True
+
+
+def test_all_fusion_numbers_from_integral():
+    print("Testing integral for fusion numbers...")
+
+    N, hor_max = (3, 3)
+
+    rep_list = create_representation_list(N=N, horizontal_max=hor_max)
+
+    print(f"Num of reps: {len(rep_list)}")
+
+    num_iterations = len(rep_list) ** 3
+    iterations = 0
+
+    matches = 0
+    errors = 0
+
+    for rep_1 in rep_list:
+        for rep_2 in rep_list:
+            for rep_final in rep_list:
+                if check_fusion_number_from_integral(rep_1, rep_2, rep_final):
+                    matches += 1
+                else:
+                    errors += 1
+
+                iterations += 1
+                print(f"Matches: {matches}, Errors: {errors}, Progress: {(iterations/num_iterations):.1%}", end=' \r')
+
+    print(f"Matches: {matches}, Errors: {errors}")
+    print("Finished!")
+
 
 if __name__ == "__main__":
     #test_CGCs()
     #test_get_particular_CGC()
 
-    test_CGCs_orthogonality()
+    #test_CGCs_orthogonality()
     #test_orthogonality_functions()
+    test_all_fusion_numbers_from_integral()
